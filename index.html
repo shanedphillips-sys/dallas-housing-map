@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dallas Housing &amp; Land Use Map</title>
+
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <link href="style.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <header>
+        <h1>Dallas Housing &amp; Land Use</h1>
+        <p class="subtitle">Toggle layers to overlay on the city.</p>
+      </header>
+
+      <section class="basemap-group">
+        <h2>Basemap</h2>
+        <label class="basemap-option">
+          <input type="radio" name="basemap" value="light" checked />
+          <span>Light gray</span>
+        </label>
+        <label class="basemap-option">
+          <input type="radio" name="basemap" value="osm" />
+          <span>OpenStreetMap</span>
+        </label>
+        <label class="basemap-option">
+          <input type="radio" name="basemap" value="satellite" />
+          <span>Satellite</span>
+        </label>
+      </section>
+
+      <section class="layer-group">
+        <h2>Layers <span class="hint">drag ⋮⋮ to reorder</span></h2>
+        <div id="layer-list">
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="city_boundary" checked />
+              <span>City boundary</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="council" checked />
+              <span>Council districts</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="rail_stops" checked />
+              <span>Rail stations</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="station_areas" checked />
+              <span>Half-mile station areas</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="parcels" />
+              <span>Assessor parcels</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="zoning" />
+              <span>Base zoning</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="land_use" />
+              <span>Land use</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="far" />
+              <span>Building floor-area ratio</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="block_groups" />
+              <span>Population change 2010-2020 (block group)</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="tracts" />
+              <span>Population change 2010-2020 (tract)</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="bg_hu" />
+              <span>Housing unit change 2010-2020 (block group)</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="tract_hu" />
+              <span>Housing unit change 2010-2020 (tract)</span>
+            </label>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="reports-group">
+        <h2>Reports</h2>
+        <button id="open-tod-report" class="report-button" type="button">
+          TOD Opportunity Areas
+        </button>
+      </section>
+
+      <section class="legend" id="legend">
+        <h2>Legend</h2>
+        <div id="legend-content">
+          <p class="muted">Toggle a layer to see its legend.</p>
+        </div>
+      </section>
+
+      <footer>
+        <p class="muted">Click any feature on the map for details.</p>
+      </footer>
+    </aside>
+
+    <div id="map"></div>
+
+    <!-- Sliding side panel for TOD Opportunity Area reports -->
+    <aside id="report-panel" class="hidden" aria-hidden="true">
+      <header class="report-header">
+        <h2>TOD Opportunity Areas</h2>
+        <button id="close-report" class="close-btn" aria-label="Close" type="button">×</button>
+      </header>
+      <div class="report-body">
+        <div class="report-controls">
+          <label for="station-select">Station</label>
+          <select id="station-select"></select>
+        </div>
+        <div id="report-content">
+          <p class="muted">Pick a station to see its TOD profile.</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
