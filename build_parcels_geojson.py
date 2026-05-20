@@ -128,6 +128,59 @@ LAND_USE_MAP = {
 }
 gdf["land_use_cat"] = gdf["LAND_SPTD_DESC"].map(LAND_USE_MAP).fillna("Other")
 
+# ---------------------------------------------------------------------------
+# 3b. Merge DCAD appraisal values (TOT_VAL / IMPR_VAL / LAND_VAL)
+#     from ACCOUNT_APPRL_YEAR.CSV in the DCAD2025_CERTIFIED folder.
+#     (The 2026 "current" zip is pre-certification — all values are 0.)
+# ---------------------------------------------------------------------------
+log("Merging in DCAD 2025 certified appraisal values from ACCOUNT_APPRL_YEAR.CSV...")
+appr_path = os.path.join(PROJECT_DIR, "GDPC Claude Stuff", "DCAD2025_CERTIFIED", "ACCOUNT_APPRL_YEAR.CSV")
+appr = pd.read_csv(
+    appr_path,
+    usecols=["ACCOUNT_NUM", "APPRAISAL_YR", "TOT_VAL", "IMPR_VAL", "LAND_VAL"],
+    low_memory=False,
+)
+appr["ACCOUNT_NUM"] = appr["ACCOUNT_NUM"].astype(str)
+# Keep only the most recent appraisal year (file may include multiple)
+appr = appr.sort_values("APPRAISAL_YR").drop_duplicates(subset="ACCOUNT_NUM", keep="last")
+log(f"  Appraisal rows: {len(appr):,} (year range {appr['APPRAISAL_YR'].min()}–{appr['APPRAISAL_YR'].max()})")
+
+gdf["ACCOUNT_NUM"] = gdf["ACCOUNT_NUM"].astype(str)
+gdf = gdf.merge(
+    appr[["ACCOUNT_NUM", "TOT_VAL", "IMPR_VAL", "LAND_VAL"]],
+    on="ACCOUNT_NUM", how="left",
+)
+for c in ["TOT_VAL", "IMPR_VAL", "LAND_VAL"]:
+    gdf[c] = pd.to_numeric(gdf[c], errors="coerce").fillna(0)
+
+# Pro-rate values across multi-polygon accounts.
+# DCAD sometimes assigns one account number to several polygon slivers
+# (e.g., DART right-of-way segments, fragmented platting, strictly-stratified
+# condo unit polygons). The appraisal table carries the full TOT_VAL on the
+# single account row — so a naive merge replicates the full value to every
+# polygon and inflates per-acre numbers on the smaller slivers. We allocate
+# each polygon a share equal to its land area / total land area of all
+# polygons sharing the same account number.
+gdf["area_feet"] = pd.to_numeric(gdf["area_feet"], errors="coerce").fillna(0)
+account_areas = gdf.groupby("ACCOUNT_NUM")["area_feet"].transform("sum")
+share = np.where(account_areas > 0, gdf["area_feet"] / account_areas, 0)
+for c in ["TOT_VAL", "IMPR_VAL", "LAND_VAL"]:
+    gdf[c] = (gdf[c] * share).round(0)
+
+acct_counts = gdf["ACCOUNT_NUM"].value_counts()
+multi_accts = (acct_counts > 1).sum()
+multi_parcels = int(gdf["ACCOUNT_NUM"].isin(acct_counts[acct_counts > 1].index).sum())
+log(f"  Pro-rated {multi_accts:,} accounts spanning multiple polygons ({multi_parcels:,} parcels affected)")
+
+# Per-acre values (acres = area_feet / 43,560). Avoid div-by-zero.
+gdf["acres_safe"] = gdf["area_feet"].replace(0, np.nan) / 43560.0
+gdf["value_per_acre"] = (gdf["TOT_VAL"]  / gdf["acres_safe"]).round(0)
+gdf["impr_per_acre"]  = (gdf["IMPR_VAL"] / gdf["acres_safe"]).round(0)
+gdf["land_per_acre"]  = (gdf["LAND_VAL"] / gdf["acres_safe"]).round(0)
+gdf[["value_per_acre", "impr_per_acre", "land_per_acre"]] = (
+    gdf[["value_per_acre", "impr_per_acre", "land_per_acre"]].fillna(0).astype(np.int64)
+)
+
 # Build address
 def build_address(row):
     parts = [
@@ -159,7 +212,8 @@ KEEP = [
     "ACCOUNT_NUM", "address", "land_use_cat", "LAND_SPTD_DESC",
     "LAND_ZONING", "area_feet", "building_sf", "total_units",
     "year_built", "floor_area_ratio", "far_cat",
-    "LAND_TOTAL_VAL", "COM_MKT_VAL",
+    "TOT_VAL", "IMPR_VAL", "LAND_VAL",
+    "value_per_acre", "impr_per_acre", "land_per_acre",
     "COM_PROPERTY_NAME", "bldg_cl",
     "DART_STATION", "dacouncil",
     "geometry",
@@ -177,8 +231,9 @@ gdf = gdf.rename(columns={
     "ACCOUNT_NUM":     "account_num",
     "LAND_SPTD_DESC":  "land_sptd_desc",
     "LAND_ZONING":     "zoning_assessor",
-    "LAND_TOTAL_VAL":  "land_value",
-    "COM_MKT_VAL":     "mkt_value",
+    "TOT_VAL":         "tot_val",
+    "IMPR_VAL":        "impr_val",
+    "LAND_VAL":        "land_val",
     "COM_PROPERTY_NAME": "property_name",
     "bldg_cl":         "bldg_class",
     "DART_STATION":    "dart_station",

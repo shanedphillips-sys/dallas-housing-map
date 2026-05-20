@@ -129,6 +129,14 @@ m = parcels["year_built"].isna() | (parcels["year_built"] == 0)
 parcels.loc[m, "year_built"] = parcels.loc[m, "COM_YEAR_BUILT"]
 parcels["year_built_clean"] = parcels["year_built"].where(parcels["year_built"] >= 1850)
 
+# Decade-built categories (must match the webmap's DECADE_BINS)
+def decade_cat(yr):
+    if pd.isna(yr) or yr < 1850: return "No data"
+    if yr < 1940: return "Pre-1940"
+    if yr < 2010: return f"{int(yr // 10 * 10)}s"
+    return "2010 or later"
+parcels["decade_cat"] = parcels["year_built_clean"].apply(decade_cat)
+
 apt = parcels["LAND_SPTD_DESC"] == "MFR - APARTMENTS"
 u = parcels.loc[apt, "total_units"]
 parcels.loc[apt & (u >= 3) & (u <= 4),  "LAND_SPTD_DESC"] = "MFR - 3-4 UNITS"
@@ -195,6 +203,7 @@ def stats_for_buffer(buf_geom):
     parcel_df = pd.DataFrame({
         "land_use_cat": p_cand["land_use_cat"].values,
         "far_cat": p_cand["far_cat"].values,
+        "decade_cat": p_cand["decade_cat"].values,
         "total_units": p_cand["total_units"].values,
         "building_sf": p_cand["building_sf"].values,
         "year_built": p_cand["year_built_clean"].values,
@@ -218,6 +227,10 @@ def stats_for_buffer(buf_geom):
     )
     far_pct = (
         (parcel_df.groupby("far_cat")["clip_area"].sum() / p_total * 100).round(1).to_dict()
+        if p_total > 0 else {}
+    )
+    decade_pct = (
+        (parcel_df.groupby("decade_cat")["clip_area"].sum() / p_total * 100).round(1).to_dict()
         if p_total > 0 else {}
     )
 
@@ -244,6 +257,7 @@ def stats_for_buffer(buf_geom):
         "zoning_pct": zoning_pct,
         "land_use_pct": landuse_pct,
         "far_pct": far_pct,
+        "decade_pct": decade_pct,
     }
 
 

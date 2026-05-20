@@ -84,8 +84,8 @@ function setBasemap(key) {
   }
 }
 
-map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
-map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-right");
 
 
 // ---- Color palettes --------------------------------------------------------
@@ -175,6 +175,98 @@ const FAR_COLORS = {
   "5.0 - 9.9":    "#ff7911",
   "10+":          "#ffdd00",
 };
+
+// Decade-built palette — same cool-to-warm progression as the FAR colors
+// (older = cool, newer = warm), extended with a deep red for the 2020s.
+// "No data" covers year_built = 0 or pre-1850 implausible values.
+const DECADE_BINS = [
+  { label: "No data",        color: "#B8B0A0" },
+  { label: "Pre-1940",       color: "#22ecf0" },
+  { label: "1940s",          color: "#14b1fd" },
+  { label: "1950s",          color: "#2c7fdb" },
+  { label: "1960s",          color: "#6539b3" },
+  { label: "1970s",          color: "#a032b2" },
+  { label: "1980s",          color: "#d124a9" },
+  { label: "1990s",          color: "#fd4dab" },
+  { label: "2000s",          color: "#ff7911" },
+  { label: "2010 or later",  color: "#ffdd00" },
+];
+
+// Value-per-acre bins (used for 3D fill-extrusion layers). Color thresholds
+// chosen to match the ordinal feel of the FAR palette. Extrusion height is
+// linear: 1 metre per $100,000 of value per acre.
+const VALUE_PER_ACRE_BINS = [
+  { upper: 250_000,    label: "< $250k",       color: "#22ecf0" },
+  { upper: 1_000_000,  label: "$250k – $1M",   color: "#14b1fd" },
+  { upper: 2_000_000,  label: "$1M – $2M",     color: "#2c7fdb" },
+  { upper: 5_000_000,  label: "$2M – $5M",     color: "#6539b3" },
+  { upper: 10_000_000, label: "$5M – $10M",    color: "#a032b2" },
+  { upper: 25_000_000, label: "$10M – $25M",   color: "#d124a9" },
+  { upper: 50_000_000, label: "$25M – $50M",   color: "#ff7911" },
+  { upper: Infinity,   label: "$50M+",         color: "#ffdd00" },
+];
+const NO_VALUE_COLOR = "#B8B0A0";
+const VALUE_HEIGHT_MULTIPLIER = 0.00001;  // 1 m extrusion per $100k value/acre
+
+function valuePerAcreColorExpr(propName) {
+  // Step expression: ≤ 0 returns the "no data" gray; positive values step
+  // through the binned color palette.
+  const expr = [
+    "step", ["coalesce", ["get", propName], 0],
+    NO_VALUE_COLOR,            // value ≤ 0 → no data
+    1, VALUE_PER_ACRE_BINS[0].color,  // 1–upper[0]
+  ];
+  for (let i = 0; i < VALUE_PER_ACRE_BINS.length - 1; i++) {
+    expr.push(VALUE_PER_ACRE_BINS[i].upper, VALUE_PER_ACRE_BINS[i + 1].color);
+  }
+  return expr;
+}
+
+function valuePerAcreHeightExpr(propName) {
+  return ["*", ["coalesce", ["get", propName], 0], VALUE_HEIGHT_MULTIPLIER];
+}
+
+function makeValuePerAcreLayer(layerKey, propName, label) {
+  const fillLayerId = `${layerKey}-3d`;
+  return {
+    label,
+    sourceId: "parcels-src",
+    sourceFile: null,
+    layerIds: [fillLayerId],
+    customLoad: async () => {
+      const data = await loadParcelsCombined();
+      if (!map.getSource("parcels-src")) {
+        map.addSource("parcels-src", { type: "geojson", data });
+      }
+    },
+    addLayers: () => {
+      map.addLayer({
+        id: fillLayerId,
+        type: "fill-extrusion",
+        source: "parcels-src",
+        minzoom: 11,
+        paint: {
+          "fill-extrusion-color": valuePerAcreColorExpr(propName),
+          "fill-extrusion-height": valuePerAcreHeightExpr(propName),
+          "fill-extrusion-base": 0,
+          "fill-extrusion-opacity": 0.9,
+        },
+      }, beneathTopLayers());
+    },
+    popup: (props) => parcelPopup(props),
+    clickLayer: fillLayerId,
+    legend: () => {
+      const rows = VALUE_PER_ACRE_BINS.map((b) =>
+        `<div class="swatch-row"><span class="swatch" style="background:${b.color}"></span>${b.label}</div>`).join("");
+      return `<div class="legend-block">
+        <h3>${label}</h3>
+        <div class="swatch-row"><span class="swatch" style="background:${NO_VALUE_COLOR}"></span>No data</div>
+        ${rows}
+        <div class="muted" style="margin-top:4px">Height ≈ 1 m per $100k/acre. Right-drag or shift-drag to tilt the map for 3D.</div>
+      </div>`;
+    },
+  };
+}
 
 
 function popChangeFillColor(propertyName, scheme) {
@@ -267,6 +359,10 @@ const LAYERS = {
     popup: (props) => `
       <div class="popup-title">Council District ${props.district}</div>
       <div class="popup-row"><span class="label">Member</span><span class="value">${props.council_member ?? ""}</span></div>
+      <div class="popup-row" style="margin-top:8px">
+        <a href="#" onclick="openReportPanel('district', '${props.district}'); return false;"
+           style="color:#4A90A4;font-weight:500">Show district report →</a>
+      </div>
     `,
     clickLayer: "council-fill",
     legend: () => `
@@ -519,6 +615,74 @@ const LAYERS = {
     },
   },
 
+  decade_built: {
+    label: "Decade built",
+    sourceId: "parcels-src",
+    sourceFile: null,
+    layerIds: ["decade-built-fill", "decade-built-outline"],
+    customLoad: async () => {
+      const data = await loadParcelsCombined();
+      if (!map.getSource("parcels-src")) {
+        map.addSource("parcels-src", { type: "geojson", data });
+      }
+    },
+    addLayers: () => {
+      // year_built < 1850 (includes the 0-coded "no data" bucket) → gray.
+      // Otherwise step through the decade thresholds.
+      const colorExpr = [
+        "case",
+        ["<", ["get", "year_built"], 1850],
+        DECADE_BINS[0].color,  // No data
+        ["step", ["get", "year_built"],
+          DECADE_BINS[1].color,  // 1850-1939: Pre-1940
+          1940, DECADE_BINS[2].color,
+          1950, DECADE_BINS[3].color,
+          1960, DECADE_BINS[4].color,
+          1970, DECADE_BINS[5].color,
+          1980, DECADE_BINS[6].color,
+          1990, DECADE_BINS[7].color,
+          2000, DECADE_BINS[8].color,
+          2010, DECADE_BINS[9].color,  // 2010 or later
+        ],
+      ];
+
+      map.addLayer({
+        id: "decade-built-fill",
+        type: "fill",
+        source: "parcels-src",
+        minzoom: 11,
+        paint: {
+          "fill-color": colorExpr,
+          "fill-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            11, 0.6, 14, 0.85,
+          ],
+        },
+      }, beneathTopLayers());
+      map.addLayer({
+        id: "decade-built-outline",
+        type: "line",
+        source: "parcels-src",
+        minzoom: 14,
+        paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
+      }, beneathTopLayers());
+    },
+    popup: (props) => parcelPopup(props),
+    clickLayer: "decade-built-fill",
+    legend: () => {
+      const rows = DECADE_BINS.map((d) =>
+        `<div class="swatch-row"><span class="swatch" style="background:${d.color}"></span>${d.label}</div>`).join("");
+      return `<div class="legend-block"><h3>Decade Built</h3>${rows}</div>`;
+    },
+  },
+
+  // 3D value-per-acre layers (Urban3-style). Each renders parcels as
+  // `fill-extrusion` polygons with height proportional to the chosen
+  // value-per-acre property and color binned by value.
+  value_per_acre: makeValuePerAcreLayer("value-per-acre", "value_per_acre", "Total value per acre"),
+  impr_per_acre:  makeValuePerAcreLayer("impr-per-acre",  "impr_per_acre",  "Improvement value per acre"),
+  land_per_acre:  makeValuePerAcreLayer("land-per-acre",  "land_per_acre",  "Taxable land value per acre"),
+
   rail_stops: {
     label: "Rail stations",
     sourceId: "rail-stops-src",
@@ -728,10 +892,13 @@ function changeRow(label, change) {
 }
 
 function parcelPopup(props) {
-  const value = props.land_value || props.mkt_value;
   const luLabel = props.land_use_cat
     ? (LAND_USE_LABEL_BY_VALUE[props.land_use_cat] || props.land_use_cat)
     : null;
+  const totVal  = props.tot_val  || 0;
+  const imprVal = props.impr_val || 0;
+  const landVal = props.land_val || 0;
+  const fmtMoney = (v) => v ? "$" + Number(v).toLocaleString() : null;
 
   // Building type: bldg_cl gives specific descriptions for commercial parcels
   // ("OFFICE BUILDING", "STORAGE WAREHOUSE", etc.). For residential parcels
@@ -752,7 +919,10 @@ function parcelPopup(props) {
     props.floor_area_ratio ? `<div class="popup-row"><span class="label">FAR</span><span class="value">${props.floor_area_ratio} (${props.far_cat || ""})</span></div>` : "",
     props.total_units ? `<div class="popup-row"><span class="label">Units</span><span class="value">${props.total_units}</span></div>` : "",
     props.year_built ? `<div class="popup-row"><span class="label">Year built</span><span class="value">${props.year_built}</span></div>` : "",
-    value ? `<div class="popup-row"><span class="label">Value</span><span class="value">$${fmt(value)}</span></div>` : "",
+    totVal  ? `<div class="popup-row"><span class="label">Total appraised value (2025)</span><span class="value">${fmtMoney(totVal)}</span></div>` : "",
+    imprVal ? `<div class="popup-row"><span class="label">Improvement value</span><span class="value">${fmtMoney(imprVal)}</span></div>` : "",
+    landVal ? `<div class="popup-row"><span class="label">Land value</span><span class="value">${fmtMoney(landVal)}</span></div>` : "",
+    props.value_per_acre ? `<div class="popup-row"><span class="label">Value / acre</span><span class="value">${fmtMoney(props.value_per_acre)}</span></div>` : "",
     props.account_num ? `<div class="popup-row"><span class="label">Account</span><span class="value" style="font-size:11px">${props.account_num}</span></div>` : "",
     props.dart_station ? `<div class="popup-row" style="margin-top:4px;color:#4A90A4;font-size:12px">★ Within Half-mile DART station area</div>` : "",
   ];
@@ -798,13 +968,15 @@ function buildChangeLegend(title, scheme) {
 
 function refreshLegend() {
   const enabled = Object.entries(LAYERS).filter(([k, v]) => v.enabled);
+  const wrapper = document.getElementById("legend");
+  const content = document.getElementById("legend-content");
   if (enabled.length === 0) {
-    document.getElementById("legend-content").innerHTML =
-      '<p class="muted">Toggle a layer to see its legend.</p>';
+    wrapper.classList.add("empty");
+    content.innerHTML = "";
     return;
   }
-  document.getElementById("legend-content").innerHTML =
-    enabled.map(([k, v]) => v.legend()).join("");
+  wrapper.classList.remove("empty");
+  content.innerHTML = enabled.map(([k, v]) => v.legend()).join("");
 }
 
 
@@ -882,6 +1054,12 @@ function applyLayerOrder() {
       if (map.getLayer(id)) map.moveLayer(id);
     });
   }
+  // Active district highlight sits above normal overlays.
+  if (map.getLayer("active-district-fill")) map.moveLayer("active-district-fill");
+  // Permits sit above the district highlight, but below the active-station rings.
+  for (const id of ["permits-sf", "permits-mf"]) {
+    if (map.getLayer(id)) map.moveLayer(id);
+  }
   // Active station radius circles must always sit above every overlay.
   // Move them in fill→line order so the overlay sits beneath the rings.
   for (const id of ["active-half-fill", "active-half-line", "active-quarter-line"]) {
@@ -933,17 +1111,229 @@ map.on("load", async () => {
   }
 
   initReports();
+  initPermits();
+
+  // Legend collapse / expand
+  const legendEl = document.getElementById("legend");
+  const collapseBtn = document.getElementById("legend-collapse");
+  if (legendEl && collapseBtn) {
+    collapseBtn.addEventListener("click", () => {
+      legendEl.classList.toggle("collapsed");
+      collapseBtn.textContent = legendEl.classList.contains("collapsed") ? "+" : "−";
+    });
+  }
 });
 
 
-// ---- TOD Opportunity Areas report panel ------------------------------------
+// ---- Building permits layer ------------------------------------------------
 //
-// Loads the precomputed station_reports.json on demand. Renders a side-panel
-// with bar-chart-style breakdowns for 1/4-mile and 1/2-mile buffers around the
-// selected station.
+// Integrated into the main layer list as a regular toggle. When checked,
+// loads data/permits.geojson and renders SF (single-family) and MF
+// (combined multifamily + commercial) circle layers, each filtered by the
+// shared year-range slider. Circle radius scales as sqrt(units) so area
+// ≈ unit count.
+
+const PERMITS_COLORS = {
+  sf: "#E8A838",  // mustard — single-family
+  mf: "#C44E52",  // red — multifamily (includes commercial)
+};
+// SF gets data type "sf"; the MF layer covers both "mf" and "com".
+const PERMITS_LAYER_TYPES = {
+  sf: ["sf"],
+  mf: ["mf", "com"],
+};
+
+let permitsState = {
+  master: false,
+  visible: { sf: true, mf: true },
+  yearStart: 2000,
+  yearEnd: 2024,
+};
+
+function permitsRadiusExpr() {
+  return [
+    "interpolate", ["linear"], ["zoom"],
+    9, [
+      "interpolate", ["linear"], ["sqrt", ["get", "units"]],
+      1, 2, 5, 4, 10, 6, 25, 10,
+    ],
+    14, [
+      "interpolate", ["linear"], ["sqrt", ["get", "units"]],
+      1, 4, 5, 8, 10, 14, 25, 24,
+    ],
+  ];
+}
+
+function buildPermitFilter(layerCode) {
+  const dataTypes = PERMITS_LAYER_TYPES[layerCode];
+  return [
+    "all",
+    ["in", ["get", "type"], ["literal", dataTypes]],
+    [">=", ["get", "year"], permitsState.yearStart],
+    ["<=", ["get", "year"], permitsState.yearEnd],
+  ];
+}
+
+function permitsPopupHTML(p) {
+  const dateLabel = p.date
+    ? new Date(p.date + "T00:00:00").toLocaleDateString("en-US",
+        { year: "numeric", month: "short", day: "numeric" })
+    : (p.year || "");
+  const typeLabel = (p.type === "sf") ? "Single-family" : "Multifamily";
+  const actLabel = {
+    new: "New Construction", recon: "Reconstruction", add: "Addition",
+    finish: "Finish Out", reno: "Renovation", alter: "Alteration",
+  }[p.act] || p.act;
+  const value = p.value ? `<div class="popup-row"><span class="label">Value</span><span class="value">$${Number(p.value).toLocaleString()}</span></div>` : "";
+  const area = p.area ? `<div class="popup-row"><span class="label">Area</span><span class="value">${Number(p.area).toLocaleString()} sq ft</span></div>` : "";
+  return `
+    <div class="popup-title">${p.addr || "Building permit"}</div>
+    <div class="popup-row"><span class="label">Issue date</span><span class="value">${dateLabel}</span></div>
+    <div class="popup-row"><span class="label">Units</span><span class="value">${p.units}</span></div>
+    <div class="popup-row"><span class="label">Type</span><span class="value">${typeLabel}</span></div>
+    <div class="popup-row"><span class="label">Activity</span><span class="value">${actLabel}</span></div>
+    ${value}${area}
+  `;
+}
+
+// Layer-registry entry. Uses customLoad to fetch the GeoJSON once on first
+// enable, addLayers to register the two circle layers + click popups, and
+// the standard enable/disable flow from the layer list checkbox.
+LAYERS.permits = {
+  label: "Building permits",
+  sourceId: "permits-src",
+  sourceFile: null,
+  layerIds: ["permits-sf", "permits-mf"],
+  customLoad: async () => {
+    if (map.getSource("permits-src")) return;
+    const r = await fetch("data/permits.geojson");
+    map.addSource("permits-src", { type: "geojson", data: await r.json() });
+  },
+  addLayers: () => {
+    for (const code of ["sf", "mf"]) {
+      const layerId = `permits-${code}`;
+      map.addLayer({
+        id: layerId,
+        type: "circle",
+        source: "permits-src",
+        filter: buildPermitFilter(code),
+        paint: {
+          "circle-radius": permitsRadiusExpr(),
+          "circle-color": PERMITS_COLORS[code],
+          "circle-stroke-color": "#FFFFFF",
+          "circle-stroke-width": 0.8,
+          "circle-opacity": 0.85,
+        },
+      });
+      map.on("click", layerId, (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        new maplibregl.Popup({ closeButton: true })
+          .setLngLat(e.lngLat)
+          .setHTML(permitsPopupHTML(f.properties))
+          .addTo(map);
+      });
+      map.on("mouseenter", layerId, () => map.getCanvas().style.cursor = "pointer");
+      map.on("mouseleave", layerId, () => map.getCanvas().style.cursor = "");
+    }
+    permitsState.master = true;
+    applyPermitsFilters();
+  },
+  popup: () => "", clickLayer: null,
+  legend: () => `
+    <div class="legend-block">
+      <h3>Building Permits</h3>
+      <div class="swatch-row"><span class="swatch" style="background:#E8A838;border-radius:50%"></span>Single-family</div>
+      <div class="swatch-row"><span class="swatch" style="background:#C44E52;border-radius:50%"></span>Multifamily</div>
+      <div class="muted" style="margin-top:4px">Circle area ≈ unit count. ${permitsState.yearStart}–${permitsState.yearEnd}.</div>
+    </div>
+  `,
+};
+
+function applyPermitsFilters() {
+  for (const code of ["sf", "mf"]) {
+    const id = `permits-${code}`;
+    if (!map.getLayer(id)) continue;
+    const visible = permitsState.master && permitsState.visible[code];
+    map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+    map.setFilter(id, buildPermitFilter(code));
+  }
+  refreshLegend();
+}
+
+function initPermits() {
+  // Sub-toggles (only meaningful while the layer is enabled, but the listeners
+  // can be wired up unconditionally — the visibility logic checks master).
+  document.querySelectorAll('input[data-permits-type]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      permitsState.visible[cb.dataset.permitsType] = cb.checked;
+      applyPermitsFilters();
+    });
+  });
+
+  // Mirror the master layer-list checkbox into permitsState so the sub-toggle
+  // visibility logic respects it on both check and un-check. (The standard
+  // layer flow in enableLayer forces visibility="visible" on both circle
+  // layers when re-enabling, so we re-apply the sub-toggle filter here.)
+  const layerCb = document.querySelector('input[data-layer="permits"]');
+  if (layerCb) {
+    layerCb.addEventListener("change", () => {
+      permitsState.master = layerCb.checked;
+      applyPermitsFilters();
+    });
+  }
+
+  // Dual-thumb year slider
+  const yrStart = document.getElementById("permits-year-start");
+  const yrEnd   = document.getElementById("permits-year-end");
+  const startLbl = document.getElementById("permits-year-start-label");
+  const endLbl   = document.getElementById("permits-year-end-label");
+  const rangeBar = document.getElementById("permits-year-range");
+  if (!yrStart || !yrEnd) return;
+
+  const MIN = parseInt(yrStart.min, 10);
+  const MAX = parseInt(yrStart.max, 10);
+
+  function updateRangeBar() {
+    const span = MAX - MIN;
+    const leftPct = ((permitsState.yearStart - MIN) / span) * 100;
+    const rightPct = ((permitsState.yearEnd - MIN) / span) * 100;
+    rangeBar.style.left = leftPct + "%";
+    rangeBar.style.width = (rightPct - leftPct) + "%";
+    startLbl.textContent = permitsState.yearStart;
+    endLbl.textContent = permitsState.yearEnd;
+  }
+
+  yrStart.addEventListener("input", () => {
+    let v = parseInt(yrStart.value, 10);
+    if (v > permitsState.yearEnd) { v = permitsState.yearEnd; yrStart.value = String(v); }
+    permitsState.yearStart = v;
+    updateRangeBar();
+    applyPermitsFilters();
+  });
+  yrEnd.addEventListener("input", () => {
+    let v = parseInt(yrEnd.value, 10);
+    if (v < permitsState.yearStart) { v = permitsState.yearStart; yrEnd.value = String(v); }
+    permitsState.yearEnd = v;
+    updateRangeBar();
+    applyPermitsFilters();
+  });
+  updateRangeBar();
+}
+
+
+// ---- Reports panel (TOD + Council District) -------------------------------
+//
+// One side panel shared between two report kinds:
+//   - "tod":      reads station_reports.json + rail_stops.geojson
+//   - "district": reads district_reports.json
+// The panel header, dropdown label, and renderer change based on the
+// currently active mode.
 
 let stationReports = null;
 let stationCoords = null;  // Map<stop_id, [lng, lat]>
+let districtReports = null;
+let reportMode = null;     // "tod" | "district"
 
 async function loadStationReports() {
   if (stationReports) return stationReports;
@@ -999,7 +1389,7 @@ function ensureActiveStationLayer() {
     filter: ["==", ["get", "radius"], "half"],
     paint: { "fill-color": "#000000", "fill-opacity": 0.15 },
   });
-  // 1/2 mile circumference (outer)
+  // 1/2 mile circumference (outer) — solid line
   map.addLayer({
     id: "active-half-line",
     type: "line",
@@ -1009,11 +1399,10 @@ function ensureActiveStationLayer() {
       "line-color": "#222222",
       "line-width": 3.0,
       "line-opacity": 0.95,
-      "line-dasharray": [3, 2],
     },
   });
-  // 1/4 mile circumference (inner) — solid line to distinguish it from
-  // the dashed outer ring; same color so they read as a single station's
+  // 1/4 mile circumference (inner) — dashed line to distinguish it from
+  // the solid outer ring; same color so they read as a single station's
   // radii pair.
   map.addLayer({
     id: "active-quarter-line",
@@ -1024,6 +1413,7 @@ function ensureActiveStationLayer() {
       "line-color": "#222222",
       "line-width": 3.0,
       "line-opacity": 0.95,
+      "line-dasharray": [3, 2],
     },
   });
 }
@@ -1059,48 +1449,157 @@ function setActiveStation(stopId) {
 
 function clearActiveStation() { setActiveStation(null); }
 
+
+// ---- Active district highlight --------------------------------------------
+// Mirrors the TOD station's transparent-black overlay, but on the polygon
+// of the currently-selected council district. No outline (the existing
+// council-line layer already draws district boundaries).
+
+let _districtGeometries = null;  // Map<district_num, geometry>
+
+async function loadDistrictGeometries() {
+  if (_districtGeometries) return _districtGeometries;
+  const r = await fetch("data/council.geojson");
+  const data = await r.json();
+  _districtGeometries = new Map();
+  for (const feat of (data.features || [])) {
+    const num = feat.properties?.district;
+    if (num != null) _districtGeometries.set(String(num), feat.geometry);
+  }
+  return _districtGeometries;
+}
+
+function ensureActiveDistrictLayer() {
+  if (map.getSource("active-district-src")) return;
+  map.addSource("active-district-src", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  map.addLayer({
+    id: "active-district-fill",
+    type: "fill",
+    source: "active-district-src",
+    paint: { "fill-color": "#000000", "fill-opacity": 0.15 },
+  });
+}
+
+async function setActiveDistrict(districtNum) {
+  ensureActiveDistrictLayer();
+  const src = map.getSource("active-district-src");
+  if (!districtNum) {
+    src.setData({ type: "FeatureCollection", features: [] });
+    return;
+  }
+  const geoms = await loadDistrictGeometries();
+  const geom = geoms.get(String(districtNum));
+  if (!geom) {
+    src.setData({ type: "FeatureCollection", features: [] });
+    return;
+  }
+  src.setData({
+    type: "FeatureCollection",
+    features: [{ type: "Feature", properties: {}, geometry: geom }],
+  });
+  applyLayerOrder();
+}
+
+function clearActiveDistrict() { setActiveDistrict(null); }
+
 function initReports() {
-  const openBtn = document.getElementById("open-tod-report");
+  const todBtn = document.getElementById("open-tod-report");
+  const distBtn = document.getElementById("open-district-report");
   const closeBtn = document.getElementById("close-report");
   const panel = document.getElementById("report-panel");
-  const select = document.getElementById("station-select");
-  if (!openBtn || !closeBtn || !panel || !select) return;
+  const select = document.getElementById("report-select");
+  if (!todBtn || !distBtn || !closeBtn || !panel || !select) return;
 
-  openBtn.addEventListener("click", async () => {
-    await ensureReportSelectorPopulated();
-    panel.classList.remove("hidden");
-    panel.setAttribute("aria-hidden", "false");
-  });
+  todBtn.addEventListener("click", () => openReportPanel("tod"));
+  distBtn.addEventListener("click", () => openReportPanel("district"));
   closeBtn.addEventListener("click", () => {
     panel.classList.add("hidden");
     panel.setAttribute("aria-hidden", "true");
     clearActiveStation();
+    clearActiveDistrict();
   });
   select.addEventListener("change", () => renderReport(select.value));
 }
 
-async function ensureReportSelectorPopulated() {
-  const select = document.getElementById("station-select");
-  if (select.options.length > 0) return;
-  const data = await loadStationReports();
-  select.innerHTML =
-    `<option value="">— select a station —</option>` +
-    data.map((s, i) => `<option value="${i}">${s.stop_name}</option>`).join("");
+async function loadDistrictReports() {
+  if (districtReports) return districtReports;
+  const r = await fetch("data/district_reports.json");
+  districtReports = (await r.json()).districts;
+  districtReports.sort((a, b) => parseInt(a.district, 10) - parseInt(b.district, 10));
+  return districtReports;
 }
 
-async function openReportFor(stopName) {
+async function populateSelect(mode) {
+  const select = document.getElementById("report-select");
+  if (mode === "tod") {
+    const data = await loadStationReports();
+    select.innerHTML =
+      `<option value="">— select a station —</option>` +
+      data.map((s, i) => `<option value="${i}">${s.stop_name}</option>`).join("");
+  } else {
+    const data = await loadDistrictReports();
+    select.innerHTML =
+      `<option value="">— select a district —</option>` +
+      data.map((d, i) => `<option value="${i}">District ${d.district} — ${d.council_member}</option>`).join("");
+  }
+}
+
+async function openReportPanel(mode, preselectKey) {
+  reportMode = mode;
   const panel = document.getElementById("report-panel");
-  const select = document.getElementById("station-select");
-  await ensureReportSelectorPopulated();
-  const idx = stationReports.findIndex((s) => s.stop_name === stopName);
-  if (idx < 0) return;
-  select.value = String(idx);
-  renderReport(String(idx));
+  const title = document.getElementById("report-title");
+  const label = document.getElementById("report-select-label");
+  const select = document.getElementById("report-select");
+
+  if (mode === "tod") {
+    title.textContent = "TOD Opportunity Areas";
+    label.textContent = "Station";
+    clearActiveDistrict();   // hide district highlight if switching from district mode
+  } else {
+    title.textContent = "Council Districts";
+    label.textContent = "District";
+    clearActiveStation();    // hide TOD rings if switching from TOD mode
+  }
+
+  await populateSelect(mode);
+
+  if (preselectKey != null) {
+    let i = -1;
+    if (mode === "tod") {
+      i = stationReports.findIndex((s) => s.stop_name === preselectKey);
+    } else {
+      i = districtReports.findIndex((d) => String(d.district) === String(preselectKey));
+    }
+    if (i >= 0) {
+      select.value = String(i);
+      renderReport(String(i));
+    } else {
+      select.value = "";
+      renderReport("");
+    }
+  } else {
+    select.value = "";
+    renderReport("");
+  }
+
   panel.classList.remove("hidden");
   panel.setAttribute("aria-hidden", "false");
 }
 
+// Backwards-compat shim — the rail-stops popup calls openReportFor(stationName)
+function openReportFor(stationName) {
+  openReportPanel("tod", stationName);
+}
+
 function renderReport(idxStr) {
+  if (reportMode === "district") return renderDistrictReport(idxStr);
+  return renderTodReport(idxStr);
+}
+
+function renderTodReport(idxStr) {
   const content = document.getElementById("report-content");
   if (idxStr === "" || idxStr == null) {
     content.innerHTML = '<p class="muted">Pick a station to see its TOD profile.</p>';
@@ -1126,42 +1625,29 @@ function renderReport(idxStr) {
   })();
   const fmtFar = (v) => v == null ? "—" : v.toFixed(2);
 
-  const headerStats = `
-    <div class="report-stat-grid">
-      <div class="report-stat">
-        <span class="report-stat-label">Dwelling units (1/2-mile radius)</span>
-        <span class="report-stat-value">${fmtNum(s.half_mile.dwelling_units)}</span>
-      </div>
-      <div class="report-stat">
-        <span class="report-stat-label">Dwelling units (1/4-mile radius)</span>
-        <span class="report-stat-value">${fmtNum(s.quarter_mile.dwelling_units)}</span>
-      </div>
-      <div class="report-stat">
-        <span class="report-stat-label">Avg floor-area ratio (1/2-mile radius)</span>
-        <span class="report-stat-value">${fmtFar(avgFar)}</span>
-      </div>
-      <div class="report-stat">
-        <span class="report-stat-label">Avg year built (1/2-mile radius)</span>
-        <span class="report-stat-value">${fmtYear(s.half_mile.avg_year_built)}</span>
-      </div>
-      <div class="report-stat">
-        <span class="report-stat-label">Median household income (2024, census tract)</span>
-        <span class="report-stat-value">${fmtIncome(s.tract_mhi_2024)}</span>
-      </div>
-      <div class="report-stat">
-        <span class="report-stat-label">Median family income (2024, census tract)</span>
-        <span class="report-stat-value">${fmtIncome(s.tract_mfi_2024)}</span>
-      </div>
-    </div>
-  `;
+  // Match the District-report styling: label/value rows in popup-row format
+  function rows(arr) {
+    return arr.map(([label, value]) =>
+      `<div class="popup-row"><span class="label">${label}</span><span class="value">${value}</span></div>`
+    ).join("");
+  }
 
-  // For each breakdown, render bars in a fixed legend order so different
-  // stations can be compared at a glance.
+  const headerStats = rows([
+    ["Dwelling units (1/2-mile radius)",            fmtNum(s.half_mile.dwelling_units)],
+    ["Dwelling units (1/4-mile radius)",            fmtNum(s.quarter_mile.dwelling_units)],
+    ["Avg floor-area ratio (1/2-mile radius)",      fmtFar(avgFar)],
+    ["Avg year built (1/2-mile radius)",            fmtYear(s.half_mile.avg_year_built)],
+    ["Median household income (2024, census tract)", fmtIncome(s.tract_mhi_2024)],
+    ["Median family income (2024, census tract)",    fmtIncome(s.tract_mfi_2024)],
+  ]);
+
+  // Fixed legend orders so stations are visually comparable
   const ZONING_ORDER = Object.keys(ZONING_COLORS);
   const FAR_ORDER = FAR_BINS;
   const LU_ORDER = LAND_USE_DEFS.map((d) => d.dataValue)
     .filter((v) => !VACANT_DATA_VALUES.includes(v))
     .concat(["Vacant"]);
+  const DECADE_ORDER = DECADE_BINS.map((b) => b.label);
 
   const ZONING_COLOR_FN = (k) => ZONING_COLORS[k] || "#CCCCCC";
   const LU_COLOR_FN = (k) => {
@@ -1170,22 +1656,25 @@ function renderReport(idxStr) {
     return def ? def.color : "#CCCCCC";
   };
   const FAR_COLOR_FN = (k) => FAR_COLORS[k] || "#CCCCCC";
+  const DECADE_COLOR_FN = (k) => {
+    const b = DECADE_BINS.find((b) => b.label === k);
+    return b ? b.color : "#CCCCCC";
+  };
 
-  function renderPctBlock(title, qPcts, hPcts, order, colorFn) {
-    let rows = "";
-    rows += `<div class="report-section-head">
-      <span>${title}</span>
+  // Two-column pct block (1/4 mi vs 1/2 mi). Title omitted from the
+  // section-head's first column since the h3 above already names the
+  // section — only the column headers remain in the section-head row.
+  function renderPctBlock(qPcts, hPcts, order, colorFn) {
+    let html = `<div class="report-section-head">
+      <span></span>
       <span class="pct-num">1/4 mi</span>
       <span class="pct-num">1/2 mi</span>
     </div>`;
     for (const k of order) {
-      const q = qPcts[k];
-      const h = hPcts[k];
+      const q = qPcts ? qPcts[k] : null;
+      const h = hPcts ? hPcts[k] : null;
       if (q == null && h == null) continue;
-      // Bar widths scaled to the larger of the two so they're comparable
-      const denom = Math.max(q || 0, h || 0, 1);
-      const wH = Math.round(((h || 0) / denom) * 100);
-      rows += `<div class="pct-row">
+      html += `<div class="pct-row">
         <span class="pct-label">
           <span class="pct-swatch" style="background:${colorFn(k)}"></span>${k}
         </span>
@@ -1193,26 +1682,196 @@ function renderReport(idxStr) {
         <span class="pct-num">${h != null ? h.toFixed(1) + "%" : "—"}</span>
       </div>`;
     }
-    return rows;
+    return `<div class="pct-block">${html}</div>`;
   }
 
   content.innerHTML = `
     <h3>${s.stop_name}</h3>
     <p class="muted" style="margin:4px 0 12px 0;font-size:11px">
-      <span style="display:inline-block;width:10px;height:10px;border:2px solid #222222;border-radius:50%;vertical-align:middle;margin-right:4px"></span>1/4 mile
+      <span style="display:inline-block;width:10px;height:10px;border:2px dashed #222222;border-radius:50%;vertical-align:middle;margin-right:4px"></span>1/4 mile
       &nbsp;
-      <span style="display:inline-block;width:10px;height:10px;border:2px dashed #222222;border-radius:50%;vertical-align:middle;margin-right:4px"></span>1/2 mile
+      <span style="display:inline-block;width:10px;height:10px;border:2px solid #222222;border-radius:50%;vertical-align:middle;margin-right:4px"></span>1/2 mile
       &nbsp;shown on map
     </p>
     ${headerStats}
 
-    <h3 style="margin-top:18px">Base zoning mix</h3>
-    ${renderPctBlock("Category", s.quarter_mile.zoning_pct, s.half_mile.zoning_pct, ZONING_ORDER, ZONING_COLOR_FN)}
+    <h3>Base zoning</h3>
+    ${renderPctBlock(s.quarter_mile.zoning_pct, s.half_mile.zoning_pct, ZONING_ORDER, ZONING_COLOR_FN)}
 
-    <h3>Land use mix</h3>
-    ${renderPctBlock("Category", s.quarter_mile.land_use_pct, s.half_mile.land_use_pct, LU_ORDER, LU_COLOR_FN)}
+    <h3>Land use</h3>
+    ${renderPctBlock(s.quarter_mile.land_use_pct, s.half_mile.land_use_pct, LU_ORDER, LU_COLOR_FN)}
 
-    <h3>Building FAR distribution</h3>
-    ${renderPctBlock("FAR bin", s.quarter_mile.far_pct, s.half_mile.far_pct, FAR_ORDER, FAR_COLOR_FN)}
+    <h3>Building floor-area ratio (FAR)</h3>
+    ${renderPctBlock(s.quarter_mile.far_pct, s.half_mile.far_pct, FAR_ORDER, FAR_COLOR_FN)}
+
+    <h3>Decade built</h3>
+    ${renderPctBlock(s.quarter_mile.decade_pct, s.half_mile.decade_pct, DECADE_ORDER, DECADE_COLOR_FN)}
+  `;
+}
+
+
+// ---- District report renderer ----------------------------------------------
+
+function renderDistrictReport(idxStr) {
+  const content = document.getElementById("report-content");
+  if (idxStr === "" || idxStr == null) {
+    content.innerHTML = '<p class="muted">Pick a district to see its profile.</p>';
+    clearActiveDistrict();
+    return;
+  }
+  const i = parseInt(idxStr, 10);
+  const d = districtReports[i];
+  if (!d) return;
+  setActiveDistrict(d.district);
+
+  const fmtNum   = (v) => v == null ? "—" : Number(v).toLocaleString();
+  const fmtMoney = (v) => v == null ? "—" : "$" + Number(v).toLocaleString();
+  const fmtPct   = (v) => v == null ? "—" : v.toFixed(1) + "%";
+  const fmtSize  = (v) => v == null ? "—" : Number(v).toFixed(2);
+  const fmtChg   = (v) => v == null ? "—" : (v > 0 ? "+" : "") + Number(v).toLocaleString();
+
+  // Small inline-styled swatch usable inside any context (popup-row label etc.)
+  function swatch(color) {
+    return `<span style="display:inline-block;width:11px;height:11px;border-radius:2px;border:1px solid rgba(0,0,0,0.15);background:${color};margin-right:6px;vertical-align:-1px"></span>`;
+  }
+
+  // Label/value rows in the consistent popup-row style used everywhere in the report
+  function rows(arr) {
+    return arr.map(([label, value]) =>
+      `<div class="popup-row"><span class="label">${label}</span><span class="value">${value}</span></div>`
+    ).join("");
+  }
+
+  // Single-column % block (used in Built environment subsections)
+  function singlePctBlock(title, pcts, order, colorFn) {
+    let html = `<div class="report-section-head">
+      <span>${title}</span>
+      <span class="pct-num">% of land</span>
+    </div>`;
+    for (const k of order) {
+      const v = pcts ? pcts[k] : null;
+      if (v == null) continue;
+      html += `<div class="pct-row pct-row-single">
+        <span class="pct-label">
+          <span class="pct-swatch" style="background:${colorFn(k)}"></span>${k}
+        </span>
+        <span class="pct-num">${v.toFixed(1)}%</span>
+      </div>`;
+    }
+    return `<div class="pct-block">${html}</div>`;
+  }
+
+  // Race / ethnicity colors (used inline inside the People section now)
+  const RC = {
+    hispanic: "#E37339",
+    nh_white: "#7B47B8",
+    nh_black: "#2877B0",
+    nh_asian: "#2A9F8F",
+    other:    "#B8B0A0",
+  };
+
+  // Built-environment color functions
+  const ZONING_ORDER = Object.keys(ZONING_COLORS);
+  const FAR_ORDER = FAR_BINS;
+  const LU_ORDER = LAND_USE_DEFS.map((x) => x.dataValue)
+    .filter((v) => !VACANT_DATA_VALUES.includes(v))
+    .concat(["Vacant"]);
+  const DECADE_ORDER = DECADE_BINS.map((b) => b.label);
+  const ZONING_COLOR_FN = (k) => ZONING_COLORS[k] || "#CCCCCC";
+  const LU_COLOR_FN = (k) => {
+    if (k === "Vacant") return "#A89F94";
+    const def = LAND_USE_DEFS.find((x) => x.dataValue === k);
+    return def ? def.color : "#CCCCCC";
+  };
+  const FAR_COLOR_FN = (k) => FAR_COLORS[k] || "#CCCCCC";
+  const DECADE_COLOR_FN = (k) => {
+    const b = DECADE_BINS.find((b) => b.label === k);
+    return b ? b.color : "#CCCCCC";
+  };
+
+  const popPct = (d.pop_2010 && d.pop_2010 > 0)
+    ? (d.pop_change / d.pop_2010 * 100).toFixed(1) + "%" : "—";
+  const huPct  = (d.hu_2010 && d.hu_2010 > 0)
+    ? (d.hu_change / d.hu_2010 * 100).toFixed(1) + "%" : "—";
+
+  content.innerHTML = `
+    <h3>District ${d.district} — ${d.council_member}</h3>
+    <p class="muted" style="margin:4px 0 12px 0;font-size:11px">
+      ${d.area_sqmi} sq mi
+    </p>
+
+    ${rows([
+      ["Population",                fmtNum(d.pop)],
+      ["Density (people / sq mi)",  fmtNum(d.density)],
+      ["Median household income",   fmtMoney(d.mhi)],
+      ["Median family income",      fmtMoney(d.mfi)],
+      ["Median age",                d.med_age ?? "—"],
+    ])}
+
+    <h3>Housing stock</h3>
+    ${rows([
+      ["Dwelling units (DCAD)",         fmtNum(d.dcad_units)],
+      ["Dwelling units (ACS)",          fmtNum(d.hu_acs)],
+      ["Median year built",             d.med_yr_built ?? "—"],
+      ["Avg household size",            fmtSize(d.avg_hh_size)],
+      ["% overcrowded (>1 per room)",   fmtPct(d.pct_overcrowded)],
+      ["Homeownership rate",            fmtPct(d.pct_owner)],
+      ["Vacancy rate",                  fmtPct(d.vacancy_rate)],
+    ])}
+
+    <h3>Housing costs &amp; affordability</h3>
+    ${rows([
+      ["Median home value",                       fmtMoney(d.med_home_value)],
+      ["Median rent",                             fmtMoney(d.med_rent)],
+      ["Renters cost-burdened (&gt;30% of income)",   fmtPct(d.pct_renter_cb)],
+      ["Renters severely cost-burdened (&gt;50%)",    fmtPct(d.pct_renter_scb)],
+      ["Owners cost-burdened (&gt;30%)",              fmtPct(d.pct_owner_cb)],
+      ["Owners severely cost-burdened (&gt;50%)",     fmtPct(d.pct_owner_scb)],
+    ])}
+
+    <h3>People</h3>
+    ${rows([
+      ["% under 18",                              fmtPct(d.pct_under_18)],
+      ["% 65 or older",                           fmtPct(d.pct_65plus)],
+      ["% foreign-born",                          fmtPct(d.pct_foreign_born)],
+      ["% bachelor's degree or higher (25+)",     fmtPct(d.pct_bach_or_higher)],
+      [`${swatch(RC.hispanic)}Hispanic`,          fmtPct(d.pct_hispanic)],
+      [`${swatch(RC.nh_white)}White (non-Hispanic)`, fmtPct(d.pct_nh_white)],
+      [`${swatch(RC.nh_black)}Black (non-Hispanic)`, fmtPct(d.pct_nh_black)],
+      [`${swatch(RC.nh_asian)}Asian (non-Hispanic)`, fmtPct(d.pct_nh_asian)],
+      [`${swatch(RC.other)}Other (non-Hispanic)`,    fmtPct(d.pct_other)],
+    ])}
+
+    <h3>Mobility</h3>
+    ${rows([
+      ["Rail stations in district",                fmtNum(d.rail_stations)],
+      ["% of district within 1/2 mi of rail",      fmtPct(d.pct_within_half_mi_rail)],
+      ["% households with no vehicle",             fmtPct(d.pct_no_vehicle)],
+      ["% non-auto commute (walk, bike, transit, WFH)", fmtPct(d.pct_non_auto_commute)],
+    ])}
+
+    <h3>Recent change (2010 → 2020 Census)</h3>
+    ${rows([
+      ["Population 2010",    fmtNum(d.pop_2010)],
+      ["Population 2020",    fmtNum(d.pop_2020)],
+      ["Change",             `${fmtChg(d.pop_change)} (${popPct})`],
+      ["Housing units 2010", fmtNum(d.hu_2010)],
+      ["Housing units 2020", fmtNum(d.hu_2020)],
+      ["Change",             `${fmtChg(d.hu_change)} (${huPct})`],
+    ])}
+
+    <h3>Permitted housing (2010–2024)</h3>
+    ${rows([
+      ["Single-family units",             fmtNum(d.permit_units_sf)],
+      ["Multifamily units",               fmtNum(d.permit_units_mf)],
+      ["Commercial (incl. mixed-use)",    fmtNum(d.permit_units_com)],
+      ["Total dwelling units",            fmtNum(d.permit_units_total)],
+    ])}
+
+    <h3>Built environment</h3>
+    ${singlePctBlock("Base zoning",     d.zoning_pct,    ZONING_ORDER, ZONING_COLOR_FN)}
+    ${singlePctBlock("Land use",        d.land_use_pct,  LU_ORDER,     LU_COLOR_FN)}
+    ${singlePctBlock("Building floor-area ratio (FAR)", d.far_pct, FAR_ORDER, FAR_COLOR_FN)}
+    ${singlePctBlock("Decade built",    d.decade_pct,    DECADE_ORDER, DECADE_COLOR_FN)}
   `;
 }

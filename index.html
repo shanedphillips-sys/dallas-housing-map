@@ -37,6 +37,39 @@
         <h2>Layers <span class="hint">drag ⋮⋮ to reorder</span></h2>
         <div id="layer-list">
 
+          <div class="layer-toggle layer-toggle-permits">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="permits" />
+              <span>Building permits</span>
+            </label>
+            <div class="permits-controls">
+              <label class="permits-type">
+                <input type="checkbox" data-permits-type="sf" checked />
+                <span class="permits-swatch" style="background:#E8A838"></span>
+                Single-family
+              </label>
+              <label class="permits-type">
+                <input type="checkbox" data-permits-type="mf" checked />
+                <span class="permits-swatch" style="background:#C44E52"></span>
+                Multifamily
+              </label>
+
+              <div class="dual-slider-block">
+                <div class="dual-slider-labels">
+                  <span id="permits-year-start-label">2000</span>
+                  <span id="permits-year-end-label">2024</span>
+                </div>
+                <div class="dual-slider" id="permits-year-slider">
+                  <span class="dual-slider-track"></span>
+                  <span class="dual-slider-range" id="permits-year-range"></span>
+                  <input type="range" id="permits-year-start" min="2000" max="2024" step="1" value="2000" />
+                  <input type="range" id="permits-year-end"   min="2000" max="2024" step="1" value="2024" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
@@ -104,6 +137,38 @@
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
+              <input type="checkbox" data-layer="decade_built" />
+              <span>Decade built</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="value_per_acre" />
+              <span>Total value per acre (3D)</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="impr_per_acre" />
+              <span>Improvement value per acre (3D)</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="land_per_acre" />
+              <span>Taxable land value per acre (3D)</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
               <input type="checkbox" data-layer="block_groups" />
               <span>Population change 2010-2020 (block group)</span>
             </label>
@@ -141,13 +206,9 @@
         <button id="open-tod-report" class="report-button" type="button">
           TOD Opportunity Areas
         </button>
-      </section>
-
-      <section class="legend" id="legend">
-        <h2>Legend</h2>
-        <div id="legend-content">
-          <p class="muted">Toggle a layer to see its legend.</p>
-        </div>
+        <button id="open-district-report" class="report-button" type="button" style="margin-top:6px">
+          Council Districts
+        </button>
       </section>
 
       <footer>
@@ -157,19 +218,28 @@
 
     <div id="map"></div>
 
-    <!-- Sliding side panel for TOD Opportunity Area reports -->
+    <!-- Floating legend overlay (bottom-left of map area) -->
+    <aside id="legend" class="map-legend" aria-label="Map legend">
+      <header class="map-legend-header">
+        <h2>Legend</h2>
+        <button id="legend-collapse" class="legend-collapse-btn" aria-label="Collapse / expand legend" type="button">−</button>
+      </header>
+      <div id="legend-content"></div>
+    </aside>
+
+    <!-- Sliding side panel for TOD and District reports -->
     <aside id="report-panel" class="hidden" aria-hidden="true">
       <header class="report-header">
-        <h2>TOD Opportunity Areas</h2>
+        <h2 id="report-title">Report</h2>
         <button id="close-report" class="close-btn" aria-label="Close" type="button">×</button>
       </header>
       <div class="report-body">
         <div class="report-controls">
-          <label for="station-select">Station</label>
-          <select id="station-select"></select>
+          <label for="report-select" id="report-select-label">Select</label>
+          <select id="report-select"></select>
         </div>
         <div id="report-content">
-          <p class="muted">Pick a station to see its TOD profile.</p>
+          <p class="muted">Select an option to see its profile.</p>
         </div>
       </div>
     </aside>
