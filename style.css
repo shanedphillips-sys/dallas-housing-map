@@ -185,6 +185,33 @@ html, body {
   display: block;
 }
 
+/* Grouped layer controls (pop change / hu change BG-vs-tract radios) */
+.layer-toggle-grouped { flex-wrap: wrap; }
+
+.layer-toggle .grouped-controls {
+  display: none;
+  width: 100%;
+  margin: 4px 0 4px 22px;
+  padding-left: 10px;
+  border-left: 2px solid #DDD;
+  gap: 14px;
+  align-items: center;
+}
+.layer-toggle-grouped:has(input[data-layer-group]:checked) .grouped-controls {
+  display: flex;
+}
+
+.radio-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+.radio-option input { margin: 0; }
+
 .permits-type {
   display: flex;
   align-items: center;
@@ -658,3 +685,123 @@ html, body {
 
 .popup-change.positive .value { color: #2A6B5F; }
 .popup-change.negative .value { color: #9E2A2B; }
+
+/* === Value by Land Use report panel === */
+.lu-selector-actions {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 10px 0;
+}
+.lu-mini-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #f3f1ec;
+  border: 1px solid #d0c9bd;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #555;
+}
+.lu-mini-btn:hover { background: #e7e3d8; }
+
+.lu-header {
+  display: grid;
+  grid-template-columns: 1fr 60px 80px;
+  gap: 6px;
+  padding: 4px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid #ddd;
+}
+.lu-header .lu-share, .lu-header .lu-money { text-align: right; }
+
+.lu-row {
+  display: grid;
+  grid-template-columns: 18px 1fr 60px 80px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+  color: #555;
+}
+.lu-row:hover { background: #faf8f3; }
+.lu-row input { margin: 0; cursor: pointer; }
+.lu-row .lu-name  { font-weight: 500; color: #333; }
+.lu-row .lu-share { text-align: right; color: #777; }
+.lu-row .lu-money { text-align: right; color: #555; font-variant-numeric: tabular-nums; }
+
+.lu-summary {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #f7f5ef;
+  border: 1px solid #d8d2c5;
+  border-radius: 5px;
+}
+.lu-summary-title {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.lu-stat {
+  display: grid;
+  grid-template-columns: 1fr 90px 60px;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: #555;
+}
+.lu-stat-label { color: #444; }
+.lu-stat-val   { text-align: right; font-variant-numeric: tabular-nums; }
+.lu-stat-pct   { text-align: right; color: #888; font-variant-numeric: tabular-nums; }
+.lu-stat-spacer { height: 6px; }
+
+/* Metric chooser + per-use $/acre listing in the Value by Land Use panel */
+.lu-metric-bar {
+  display: flex;
+  gap: 14px;
+  margin: 4px 0 8px 0;
+  padding: 6px 8px;
+  background: #f3f1ec;
+  border: 1px solid #d8d2c5;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.lu-metric-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: #444;
+}
+.lu-metric-opt input { margin: 0; cursor: pointer; }
+
+.lu-ppa-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: #555;
+}
+.lu-ppa-name { color: #444; }
+.lu-ppa-val  { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Value-per-acre layer cap toggle — visible only when its layer is checked */
+.layer-toggle-value { flex-wrap: wrap; }
+.layer-toggle .value-cap-controls {
+  display: none;
+  width: 100%;
+  margin: 4px 0 4px 22px;
+  padding-left: 10px;
+  border-left: 2px solid #DDD;
+}
+.layer-toggle-value:has(input[data-layer]:checked) .value-cap-controls {
+  display: block;
+}

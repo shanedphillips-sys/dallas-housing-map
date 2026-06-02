@@ -106,7 +106,38 @@ const POP_CHANGE_COLORS = {
              "Stable (±99)", "Gain 100–299", "Gain 300–499", "Gain > 500"],
   },
 };
+
+// Housing-unit change uses tighter bins than population change (each BG / tract
+// typically has fewer housing units than residents).  3 loss bins + stable + 4
+// gain bins = 8 colors.  The biggest-loss bucket is capped lower than the
+// biggest-gain bucket because heavy losses are uncommon.
+const HU_CHANGE_COLORS = {
+  bg: {
+    edges:   [-150, -50, -25, 25, 50, 150, 300],
+    palette: ["#9E2A2B", "#D64550", "#F4A6A6", "#FAF5C5",
+              "#A6CDE3", "#4A90A4", "#2E6F86", "#1D4F66"],
+    labels: ["Loss ≥ 150", "Loss 50–149", "Loss 25–49",
+             "Stable (±25)",
+             "Gain 25–49", "Gain 50–149", "Gain 150–299", "Gain ≥ 300"],
+  },
+  tract: {
+    edges:   [-250, -150, -50, 50, 150, 250, 500],
+    palette: ["#9E2A2B", "#D64550", "#F4A6A6", "#FAF5C5",
+              "#A6CDE3", "#4A90A4", "#2E6F86", "#1D4F66"],
+    labels: ["Loss ≥ 250", "Loss 150–249", "Loss 50–149",
+             "Stable (±49)",
+             "Gain 50–149", "Gain 150–249", "Gain 250–499", "Gain ≥ 500"],
+  },
+};
 const LOW_DENS_COLOR = "#B8B0A0";
+
+// Jobs density (workplace jobs per acre). Uses a heatmap-style YlOrRd ramp.
+const JOBS_BINS = {
+  edges:   [1, 5, 15, 50, 100],
+  palette: ["#FFF7BC", "#FEE391", "#FEC44F", "#FE9929", "#D95F0E", "#993404"],
+  labels:  ["< 1", "1–5", "5–15", "15–50", "50–100", "100+"],
+};
+const JOBS_ZERO_COLOR = "#EEE9DF";
 const LOW_DENS_LABEL = "Low density (<1,000 / sq mi)";
 
 // Zoning palette — colors mirror the land-use map where possible:
@@ -146,6 +177,7 @@ const LAND_USE_DEFS = [
   { dataValue: "Mobile Home",                   label: "Mobile Home",           color: "#BCAAA4" },
   { dataValue: "Commercial",                    label: "Commercial",            color: "#4A90A4" },
   { dataValue: "Industrial",                    label: "Industrial",            color: "#6B5B95" },
+  { dataValue: "Institutional",                 label: "Institutional / Government", color: "#37474F" },
   { dataValue: "Vacant - Single Family",        label: "Vacant - Single Family", color: "#F5D6A8", vacant: true },
   { dataValue: "Vacant - Commercial",           label: "Vacant - Commercial",   color: "#4A90A4", vacant: true },
   { dataValue: "Vacant - Industrial",           label: "Vacant - Industrial",   color: "#6B5B95", vacant: true },
@@ -195,26 +227,36 @@ const DECADE_BINS = [
 // Value-per-acre bins (used for 3D fill-extrusion layers). Color thresholds
 // chosen to match the ordinal feel of the FAR palette. Extrusion height is
 // linear: 1 metre per $100,000 of value per acre.
+// Anything below this value/acre is rendered transparent (and at zero height)
+// so wide, non-privately-owned parcels — lakes, levees, ROW, parks, etc. —
+// don't clutter the map with low-info bright blue swaths.
+const LOW_VALUE_THRESHOLD = 100_000;
+const TRANSPARENT_COLOR = "rgba(0,0,0,0)";
+
 const VALUE_PER_ACRE_BINS = [
-  { upper: 250_000,    label: "< $250k",       color: "#22ecf0" },
-  { upper: 1_000_000,  label: "$250k – $1M",   color: "#14b1fd" },
-  { upper: 2_000_000,  label: "$1M – $2M",     color: "#2c7fdb" },
-  { upper: 5_000_000,  label: "$2M – $5M",     color: "#6539b3" },
-  { upper: 10_000_000, label: "$5M – $10M",    color: "#a032b2" },
-  { upper: 25_000_000, label: "$10M – $25M",   color: "#d124a9" },
-  { upper: 50_000_000, label: "$25M – $50M",   color: "#ff7911" },
-  { upper: Infinity,   label: "$50M+",         color: "#ffdd00" },
+  { upper: 500_000,    label: "$100k – $500k", color: "#FED976" },  // pale yellow
+  { upper: 2_000_000,  label: "$500k – $2M",   color: "#FEA665" },  // soft orange
+  { upper: 10_000_000, label: "$2M – $10M",    color: "#ED5752" },  // softer red
+  { upper: 50_000_000, label: "$10M – $50M",   color: "#B5435A" },  // muted burgundy
+  { upper: Infinity,   label: "$50M+",         color: "#7E55B0" },  // muted purple
 ];
-const NO_VALUE_COLOR = "#B8B0A0";
-const VALUE_HEIGHT_MULTIPLIER = 0.00001;  // 1 m extrusion per $100k value/acre
+// Linear extrusion: 1 m per $25k/acre, capped at the height that $300M/acre
+// would produce ($300M / $25k = 12,000 m).
+const VALUE_HEIGHT_PER_M    = 25_000;
+const VALUE_HEIGHT_CAP_VALUE = 100_000_000;
+const VALUE_HEIGHT_CAP_M     = VALUE_HEIGHT_CAP_VALUE / VALUE_HEIGHT_PER_M;   // 4,000 m
+// Minimum parcel area to render — drops TIF / placeholder accounts that
+// have a few sq ft of geometry and produce absurd per-acre numbers.
+const MIN_RENDER_AREA_SQFT = 100;
 
 function valuePerAcreColorExpr(propName) {
-  // Step expression: ≤ 0 returns the "no data" gray; positive values step
-  // through the binned color palette.
+  // Anything below the low-value threshold (including value=0 "no data") is
+  // returned transparent; positive values at/above threshold step through the
+  // binned palette.
   const expr = [
     "step", ["coalesce", ["get", propName], 0],
-    NO_VALUE_COLOR,            // value ≤ 0 → no data
-    1, VALUE_PER_ACRE_BINS[0].color,  // 1–upper[0]
+    TRANSPARENT_COLOR,
+    LOW_VALUE_THRESHOLD, VALUE_PER_ACRE_BINS[0].color,
   ];
   for (let i = 0; i < VALUE_PER_ACRE_BINS.length - 1; i++) {
     expr.push(VALUE_PER_ACRE_BINS[i].upper, VALUE_PER_ACRE_BINS[i + 1].color);
@@ -222,17 +264,48 @@ function valuePerAcreColorExpr(propName) {
   return expr;
 }
 
+// Global state: whether the $100M/acre height cap is on (true by default).
+// Toggleable via the per-layer "Cap heights at $100M/acre" sub-checkbox.
+let valueCapEnabled = true;
+
 function valuePerAcreHeightExpr(propName) {
-  return ["*", ["coalesce", ["get", propName], 0], VALUE_HEIGHT_MULTIPLIER];
+  const v = ["coalesce", ["get", propName], 0];
+  const scaled = ["/", v, VALUE_HEIGHT_PER_M];
+  const heightExpr = valueCapEnabled
+    ? ["min", VALUE_HEIGHT_CAP_M, scaled]
+    : scaled;
+  return [
+    "case",
+    ["<", v, LOW_VALUE_THRESHOLD], 0,
+    heightExpr,
+  ];
+}
+
+// Rebuild fill-extrusion-height for all currently-added value layers when the
+// cap toggle changes. We have to call setPaintProperty on each layer because
+// the expression is captured at addLayer() time.
+function refreshValueHeightExprs() {
+  const layerKeys = ["value_per_acre", "impr_per_acre", "land_per_acre"];
+  const propMap = {
+    value_per_acre: "value_per_acre",
+    impr_per_acre:  "impr_per_acre",
+    land_per_acre:  "land_per_acre",
+  };
+  for (const k of layerKeys) {
+    const layerId = `${k.replace(/_per_acre$/, "-per-acre")}-3d`;
+    if (!map.getLayer(layerId)) continue;
+    map.setPaintProperty(layerId, "fill-extrusion-height", valuePerAcreHeightExpr(propMap[k]));
+  }
 }
 
 function makeValuePerAcreLayer(layerKey, propName, label) {
-  const fillLayerId = `${layerKey}-3d`;
+  const fillLayerId    = `${layerKey}-3d`;
+  const lowLayerId     = `${layerKey}-low`;
   return {
     label,
     sourceId: "parcels-src",
     sourceFile: null,
-    layerIds: [fillLayerId],
+    layerIds: [lowLayerId, fillLayerId],
     customLoad: async () => {
       const data = await loadParcelsCombined();
       if (!map.getSource("parcels-src")) {
@@ -240,29 +313,54 @@ function makeValuePerAcreLayer(layerKey, propName, label) {
       }
     },
     addLayers: () => {
+      // Low-value parcels: rendered as a flat 2D fill at 1% opacity. We use
+      // a fill layer instead of fill-extrusion because fill-extrusion-opacity
+      // is layer-wide and can't be set per-feature; a plain `fill` layer
+      // supports both per-feature alpha and a low layer-level opacity.
+      map.addLayer({
+        id: lowLayerId,
+        type: "fill",
+        source: "parcels-src",
+        minzoom: 11,
+        filter: ["all",
+          ["<", ["coalesce", ["get", propName], 0], LOW_VALUE_THRESHOLD],
+          [">=", ["coalesce", ["get", "area_feet"], 0], MIN_RENDER_AREA_SQFT],
+        ],
+        paint: {
+          "fill-color": "#FFFFFF",
+          "fill-opacity": 0.01,
+        },
+      }, beneathTopLayers());
+
+      // Value parcels: 3D extrusion at full opacity.
       map.addLayer({
         id: fillLayerId,
         type: "fill-extrusion",
         source: "parcels-src",
         minzoom: 11,
+        filter: ["all",
+          [">=", ["coalesce", ["get", propName], 0], LOW_VALUE_THRESHOLD],
+          [">=", ["coalesce", ["get", "area_feet"], 0], MIN_RENDER_AREA_SQFT],
+        ],
         paint: {
           "fill-extrusion-color": valuePerAcreColorExpr(propName),
           "fill-extrusion-height": valuePerAcreHeightExpr(propName),
           "fill-extrusion-base": 0,
-          "fill-extrusion-opacity": 0.9,
+          "fill-extrusion-opacity": 1.0,
         },
       }, beneathTopLayers());
     },
     popup: (props) => parcelPopup(props),
-    clickLayer: fillLayerId,
+    clickLayer: [fillLayerId, lowLayerId],
     legend: () => {
       const rows = VALUE_PER_ACRE_BINS.map((b) =>
         `<div class="swatch-row"><span class="swatch" style="background:${b.color}"></span>${b.label}</div>`).join("");
+      const lowRow = `<div class="swatch-row"><span class="swatch" style="background:transparent;border:1px solid #888"></span>&lt; $100k / acre</div>`;
       return `<div class="legend-block">
         <h3>${label}</h3>
-        <div class="swatch-row"><span class="swatch" style="background:${NO_VALUE_COLOR}"></span>No data</div>
+        ${lowRow}
         ${rows}
-        <div class="muted" style="margin-top:4px">Height ≈ 1 m per $100k/acre. Right-drag or shift-drag to tilt the map for 3D.</div>
+        <div class="muted" style="margin-top:4px">Height: 1 m per $25k/acre${valueCapEnabled ? ", capped at $100M/acre (4,000 m)" : " (uncapped)"}. Right-drag or shift-drag to tilt for 3D.</div>
       </div>`;
     },
   };
@@ -270,19 +368,17 @@ function makeValuePerAcreLayer(layerKey, propName, label) {
 
 
 function popChangeFillColor(propertyName, scheme) {
+  // Build a generic ["step", ...] expression for an N-bin palette.
+  // (Used by both pop-change [7 bins] and hu-change [8 bins].)
+  const stepExpr = ["step", ["get", propertyName], scheme.palette[0]];
+  for (let i = 0; i < scheme.edges.length; i++) {
+    stepExpr.push(scheme.edges[i], scheme.palette[i + 1]);
+  }
   return [
     "case",
     ["==", ["get", "low_density"], true],
     LOW_DENS_COLOR,
-    ["step", ["get", propertyName],
-      scheme.palette[0],
-      scheme.edges[0], scheme.palette[1],
-      scheme.edges[1], scheme.palette[2],
-      scheme.edges[2], scheme.palette[3],
-      scheme.edges[3], scheme.palette[4],
-      scheme.edges[4], scheme.palette[5],
-      scheme.edges[5], scheme.palette[6],
-    ],
+    stepExpr,
   ];
 }
 
@@ -790,7 +886,7 @@ const LAYERS = {
         type: "fill",
         source: "bg-hu-src",
         paint: {
-          "fill-color": popChangeFillColor("hu_change", POP_CHANGE_COLORS.bg),
+          "fill-color": popChangeFillColor("hu_change", HU_CHANGE_COLORS.bg),
           "fill-opacity": 0.75,
         },
       }, beneathTopLayers());
@@ -803,7 +899,7 @@ const LAYERS = {
     },
     popup: (props) => bgPopup(props),
     clickLayer: "bg-hu-fill",
-    legend: () => buildChangeLegend("Housing Unit Change, BG", POP_CHANGE_COLORS.bg),
+    legend: () => buildChangeLegend("Housing Unit Change, BG", HU_CHANGE_COLORS.bg),
   },
 
   tracts: {
@@ -844,7 +940,7 @@ const LAYERS = {
         type: "fill",
         source: "tract-hu-src",
         paint: {
-          "fill-color": popChangeFillColor("hu_change", POP_CHANGE_COLORS.tract),
+          "fill-color": popChangeFillColor("hu_change", HU_CHANGE_COLORS.tract),
           "fill-opacity": 0.75,
         },
       }, beneathTopLayers());
@@ -857,7 +953,43 @@ const LAYERS = {
     },
     popup: (props) => tractPopup(props),
     clickLayer: "tract-hu-fill",
-    legend: () => buildChangeLegend("Housing Unit Change, Tract", POP_CHANGE_COLORS.tract),
+    legend: () => buildChangeLegend("Housing Unit Change, Tract", HU_CHANGE_COLORS.tract),
+  },
+
+  jobs_density: {
+    label: "Job density (workplace) 2022",
+    sourceId: "jobs-src",
+    sourceFile: "data/jobs_tracts.geojson",
+    layerIds: ["jobs-fill", "jobs-outline"],
+    addLayers: () => {
+      const colorExpr = [
+        "case",
+        ["==", ["get", "jobs_total"], 0], JOBS_ZERO_COLOR,
+        ["step", ["get", "jobs_per_acre"],
+          JOBS_BINS.palette[0],
+          JOBS_BINS.edges[0], JOBS_BINS.palette[1],
+          JOBS_BINS.edges[1], JOBS_BINS.palette[2],
+          JOBS_BINS.edges[2], JOBS_BINS.palette[3],
+          JOBS_BINS.edges[3], JOBS_BINS.palette[4],
+          JOBS_BINS.edges[4], JOBS_BINS.palette[5],
+        ],
+      ];
+      map.addLayer({
+        id: "jobs-fill",
+        type: "fill",
+        source: "jobs-src",
+        paint: { "fill-color": colorExpr, "fill-opacity": 0.75 },
+      }, beneathTopLayers());
+      map.addLayer({
+        id: "jobs-outline",
+        type: "line",
+        source: "jobs-src",
+        paint: { "line-color": "#FFFFFF", "line-width": 0.4 },
+      }, beneathTopLayers());
+    },
+    popup: (props) => jobsPopup(props),
+    clickLayer: "jobs-fill",
+    legend: () => buildJobsLegend(),
   },
 };
 
@@ -882,12 +1014,18 @@ function fmt(n) {
   return Number(n).toLocaleString();
 }
 
-function changeRow(label, change) {
+function changeRow(label, change, base) {
   const cls = change > 0 ? "positive" : change < 0 ? "negative" : "";
   const sign = change > 0 ? "+" : "";
+  let pctStr = "";
+  if (base !== undefined && base !== null && Number(base) > 0) {
+    const pct = (Number(change) / Number(base)) * 100;
+    const pctSign = pct > 0 ? "+" : "";
+    pctStr = ` (${pctSign}${pct.toFixed(1)}%)`;
+  }
   return `<div class="popup-row popup-change ${cls}">
     <span class="label">${label}</span>
-    <span class="value">${sign}${fmt(change)}</span>
+    <span class="value">${sign}${fmt(change)}${pctStr}</span>
   </div>`;
 }
 
@@ -936,12 +1074,12 @@ function bgOrTractBody(props) {
     <div class="popup-row" style="margin-top:6px;font-weight:600;color:#444;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">Population</div>
     <div class="popup-row"><span class="label">2010</span><span class="value">${fmt(props.pop_2010)}</span></div>
     <div class="popup-row"><span class="label">2020</span><span class="value">${fmt(props.pop_2020)}</span></div>
-    ${changeRow("Change", props.pop_change)}
+    ${changeRow("Change", props.pop_change, props.pop_2010)}
 
     <div class="popup-row" style="margin-top:6px;font-weight:600;color:#444;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">Housing Units</div>
     <div class="popup-row"><span class="label">2010</span><span class="value">${fmt(props.hu_2010)}</span></div>
     <div class="popup-row"><span class="label">2020</span><span class="value">${fmt(props.hu_2020)}</span></div>
-    ${changeRow("Change", props.hu_change)}
+    ${changeRow("Change", props.hu_change, props.hu_2010)}
 
     ${props.low_density ? '<div class="popup-row" style="margin-top:6px;color:#888;font-size:11px">⚠ Low density — interpret with caution</div>' : ""}
   `;
@@ -953,6 +1091,106 @@ function bgPopup(props) {
 
 function tractPopup(props) {
   return `<div class="popup-title">Tract ${props.geoid}</div>${bgOrTractBody(props)}`;
+}
+
+// Jobs / wages popup -------------------------------------------------------
+
+const JOB_SECTOR_LABELS = {
+  sec_CNS01: "Agriculture & Forestry",
+  sec_CNS02: "Mining / Oil & Gas",
+  sec_CNS03: "Utilities",
+  sec_CNS04: "Construction",
+  sec_CNS05: "Manufacturing",
+  sec_CNS06: "Wholesale Trade",
+  sec_CNS07: "Retail Trade",
+  sec_CNS08: "Transportation & Warehousing",
+  sec_CNS09: "Information",
+  sec_CNS10: "Finance & Insurance",
+  sec_CNS11: "Real Estate",
+  sec_CNS12: "Professional Services",
+  sec_CNS13: "Mgmt of Companies",
+  sec_CNS14: "Admin & Support",
+  sec_CNS15: "Educational Services",
+  sec_CNS16: "Health Care",
+  sec_CNS17: "Arts & Entertainment",
+  sec_CNS18: "Accommodation & Food",
+  sec_CNS19: "Other Services",
+  sec_CNS20: "Public Administration",
+};
+
+function fmtMoney(n) {
+  if (n === undefined || n === null || Number.isNaN(n)) return "—";
+  n = Number(n);
+  if (n >= 1e9)  return "$" + (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6)  return "$" + (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3)  return "$" + (n / 1e3).toFixed(0) + "K";
+  return "$" + Math.round(n).toLocaleString();
+}
+
+function jobsPopup(props) {
+  const tot = props.jobs_total || 0;
+  // CNS fields in the GeoJSON come through with their raw names CNS01..CNS20.
+  // (We stored them that way in build_jobs_tracts.py.)
+  const sectorRows = Object.keys(JOB_SECTOR_LABELS)
+    .map((k) => {
+      const raw = k.replace("sec_", "");
+      const v = Number(props[raw] || 0);
+      return { label: JOB_SECTOR_LABELS[k], value: v };
+    })
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  const topSectors = sectorRows.slice(0, 5);
+  const sectorHtml = topSectors.length
+    ? topSectors
+        .map((r) => {
+          const pct = tot > 0 ? ((r.value / tot) * 100).toFixed(1) + "%" : "—";
+          return `<div class="popup-row"><span class="label">${r.label}</span><span class="value">${fmt(r.value)} (${pct})</span></div>`;
+        })
+        .join("")
+    : '<div class="popup-row"><span class="label" style="color:#888">No sector data</span></div>';
+
+  const u50  = Number(props.jobs_under_50k  || 0);
+  const m50  = Number(props.jobs_50_to_100k || 0);
+  const o100 = Number(props.jobs_over_100k  || 0);
+  const u50Pct  = tot > 0 ? ((u50  / tot) * 100).toFixed(0) + "%" : "—";
+  const m50Pct  = tot > 0 ? ((m50  / tot) * 100).toFixed(0) + "%" : "—";
+  const o100Pct = tot > 0 ? ((o100 / tot) * 100).toFixed(0) + "%" : "—";
+
+  return `
+    <div class="popup-title">Tract ${props.geoid}</div>
+    <div class="popup-row"><span class="label">Land area</span><span class="value">${props.land_sq_mi} sq mi</span></div>
+
+    <div class="popup-row" style="margin-top:6px;font-weight:600;color:#444;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">Jobs (workplace, 2022)</div>
+    <div class="popup-row"><span class="label">Total jobs</span><span class="value">${fmt(tot)}</span></div>
+    <div class="popup-row"><span class="label">Density</span><span class="value">${fmt(props.jobs_per_acre)} / acre</span></div>
+    <div class="popup-row"><span class="label">Share of 7-county total</span><span class="value">${(props.jobs_share_pct || 0).toFixed(3)}%</span></div>
+
+    <div class="popup-row" style="margin-top:6px;font-weight:600;color:#444;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">Estimated annual wages</div>
+    <div class="popup-row"><span class="label">Midpoint method</span><span class="value">${fmtMoney(props.wages_midpoint)}</span></div>
+    <div class="popup-row"><span class="label">BLS sector-weighted</span><span class="value">${fmtMoney(props.wages_sector)}</span></div>
+
+    <div class="popup-row" style="margin-top:6px;font-weight:600;color:#444;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">Wage mix (by sector)</div>
+    <div class="popup-row"><span class="label">&lt; $50k/yr</span><span class="value">${fmt(u50)} (${u50Pct})</span></div>
+    <div class="popup-row"><span class="label">$50k–$100k</span><span class="value">${fmt(m50)} (${m50Pct})</span></div>
+    <div class="popup-row"><span class="label">&gt; $100k/yr</span><span class="value">${fmt(o100)} (${o100Pct})</span></div>
+
+    <div class="popup-row" style="margin-top:6px;font-weight:600;color:#444;font-size:11px;text-transform:uppercase;letter-spacing:0.4px">Top sectors</div>
+    ${sectorHtml}
+  `;
+}
+
+function buildJobsLegend() {
+  const swatches = JOBS_BINS.palette
+    .map((c, i) => `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${JOBS_BINS.labels[i]}</div>`)
+    .join("");
+  const zero = `<div class="swatch-row"><span class="swatch" style="background:${JOBS_ZERO_COLOR}"></span>No jobs</div>`;
+  return `
+      <div class="legend-block">
+        <h3>Workplace jobs / acre (2022)</h3>
+        ${swatches}
+        ${zero}
+      </div>`;
 }
 
 
@@ -1004,16 +1242,19 @@ async function enableLayer(key) {
     layer.addLayers();
     layer.layerIds.forEach((id) => layersAdded.add(id));
     if (layer.clickLayer) {
-      map.on("click", layer.clickLayer, (e) => {
-        const f = e.features?.[0];
-        if (!f) return;
-        new maplibregl.Popup({ closeButton: true })
-          .setLngLat(e.lngLat)
-          .setHTML(layer.popup(f.properties))
-          .addTo(map);
-      });
-      map.on("mouseenter", layer.clickLayer, () => map.getCanvas().style.cursor = "pointer");
-      map.on("mouseleave", layer.clickLayer, () => map.getCanvas().style.cursor = "");
+      const clickTargets = Array.isArray(layer.clickLayer) ? layer.clickLayer : [layer.clickLayer];
+      for (const target of clickTargets) {
+        map.on("click", target, (e) => {
+          const f = e.features?.[0];
+          if (!f) return;
+          new maplibregl.Popup({ closeButton: true })
+            .setLngLat(e.lngLat)
+            .setHTML(layer.popup(f.properties))
+            .addTo(map);
+        });
+        map.on("mouseenter", target, () => map.getCanvas().style.cursor = "pointer");
+        map.on("mouseleave", target, () => map.getCanvas().style.cursor = "");
+      }
     }
   }
   layer.layerIds.forEach((id) => map.setLayoutProperty(id, "visibility", "visible"));
@@ -1047,7 +1288,19 @@ function applyLayerOrder() {
   // Iterate sidebar from bottom to top
   for (let i = items.length - 1; i >= 0; i--) {
     const cb = items[i].querySelector('input[type="checkbox"]');
-    const key = cb && cb.dataset.layer;
+    if (!cb) continue;
+    let key = cb.dataset.layer;
+    // Grouped (pop_change / hu_change): pick whichever sub-layer's radio
+    // is currently selected.
+    if (!key && cb.dataset.layerGroup) {
+      const group = cb.dataset.layerGroup;
+      const groupMap = {
+        pop_change: { bg: "block_groups", tract: "tracts" },
+        hu_change:  { bg: "bg_hu",        tract: "tract_hu" },
+      }[group];
+      const rb = document.querySelector(`input[name="${group}_level"]:checked`);
+      if (groupMap && rb) key = groupMap[rb.value];
+    }
     const layer = LAYERS[key];
     if (!layer) continue;
     layer.layerIds.forEach((id) => {
@@ -1097,6 +1350,59 @@ map.on("load", async () => {
     if (LAYERS[key]) await enableLayer(key);
   }
 
+  // Grouped checkbox + radio orchestration.
+  // Two groups today: "pop_change" (BG -> block_groups / Tract -> tracts) and
+  // "hu_change" (BG -> bg_hu / Tract -> tract_hu). The parent checkbox enables
+  // the *currently-selected radio's* layer; switching the radio while the
+  // parent is checked swaps between the two underlying layers.
+  const GROUP_MAP = {
+    pop_change: { bg: "block_groups", tract: "tracts" },
+    hu_change:  { bg: "bg_hu",        tract: "tract_hu" },
+  };
+  const groupBoxes = document.querySelectorAll('input[data-layer-group]');
+  groupBoxes.forEach((cb) => {
+    const group = cb.dataset.layerGroup;
+    const map_ = GROUP_MAP[group];
+    if (!map_) return;
+    const radioName = `${group}_level`;
+    const selectedLevel = () => {
+      const r = document.querySelector(`input[name="${radioName}"]:checked`);
+      return r ? r.value : "bg";
+    };
+    cb.addEventListener("change", async () => {
+      const level = selectedLevel();
+      const key = map_[level];
+      const other = map_[level === "bg" ? "tract" : "bg"];
+      if (cb.checked) {
+        cb.parentElement.classList.add("loading");
+        try {
+          if (LAYERS[other]) disableLayer(other);
+          if (LAYERS[key])   await enableLayer(key);
+        } finally {
+          cb.parentElement.classList.remove("loading");
+        }
+      } else {
+        if (LAYERS[map_.bg])    disableLayer(map_.bg);
+        if (LAYERS[map_.tract]) disableLayer(map_.tract);
+      }
+    });
+    document.querySelectorAll(`input[name="${radioName}"]`).forEach((rb) => {
+      rb.addEventListener("change", async () => {
+        if (!rb.checked || !cb.checked) return;
+        const level = rb.value;
+        const key = map_[level];
+        const other = map_[level === "bg" ? "tract" : "bg"];
+        cb.parentElement.classList.add("loading");
+        try {
+          if (LAYERS[other]) disableLayer(other);
+          if (LAYERS[key])   await enableLayer(key);
+        } finally {
+          cb.parentElement.classList.remove("loading");
+        }
+      });
+    });
+  });
+
   // Drag-and-drop reordering of the layer list.
   const layerList = document.getElementById("layer-list");
   if (layerList && window.Sortable) {
@@ -1109,6 +1415,21 @@ map.on("load", async () => {
       onEnd: () => applyLayerOrder(),
     });
   }
+
+  // Wire the per-layer "Cap heights at $100M/acre" sub-checkbox. The three
+  // copies (one under each value-per-acre layer toggle) all drive a single
+  // shared state, and any change refreshes the height expression on every
+  // currently-rendered value layer.
+  document.querySelectorAll('input[data-value-cap]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      valueCapEnabled = cb.checked;
+      document.querySelectorAll('input[data-value-cap]').forEach((other) => {
+        if (other !== cb) other.checked = valueCapEnabled;
+      });
+      refreshValueHeightExprs();
+      refreshLegend();
+    });
+  });
 
   initReports();
   initPermits();
@@ -1508,6 +1829,7 @@ function clearActiveDistrict() { setActiveDistrict(null); }
 function initReports() {
   const todBtn = document.getElementById("open-tod-report");
   const distBtn = document.getElementById("open-district-report");
+  const luBtn  = document.getElementById("open-land-use-report");
   const closeBtn = document.getElementById("close-report");
   const panel = document.getElementById("report-panel");
   const select = document.getElementById("report-select");
@@ -1515,6 +1837,7 @@ function initReports() {
 
   todBtn.addEventListener("click", () => openReportPanel("tod"));
   distBtn.addEventListener("click", () => openReportPanel("district"));
+  if (luBtn) luBtn.addEventListener("click", () => openReportPanel("land_use"));
   closeBtn.addEventListener("click", () => {
     panel.classList.add("hidden");
     panel.setAttribute("aria-hidden", "true");
@@ -1553,15 +1876,31 @@ async function openReportPanel(mode, preselectKey) {
   const title = document.getElementById("report-title");
   const label = document.getElementById("report-select-label");
   const select = document.getElementById("report-select");
+  const controls = document.querySelector(".report-controls");
 
   if (mode === "tod") {
     title.textContent = "TOD Opportunity Areas";
     label.textContent = "Station";
-    clearActiveDistrict();   // hide district highlight if switching from district mode
-  } else {
+    clearActiveDistrict();
+    if (controls) controls.style.display = "";
+  } else if (mode === "district") {
     title.textContent = "Council Districts";
     label.textContent = "District";
-    clearActiveStation();    // hide TOD rings if switching from TOD mode
+    clearActiveStation();
+    if (controls) controls.style.display = "";
+  } else if (mode === "land_use") {
+    title.textContent = "Value by Land Use";
+    clearActiveStation();
+    clearActiveDistrict();
+    // Hide the single-select dropdown; this mode uses inline multi-select checkboxes.
+    if (controls) controls.style.display = "none";
+  }
+
+  if (mode === "land_use") {
+    await renderLandUseReport();
+    panel.classList.remove("hidden");
+    panel.setAttribute("aria-hidden", "false");
+    return;
   }
 
   await populateSelect(mode);
@@ -1596,7 +1935,169 @@ function openReportFor(stationName) {
 
 function renderReport(idxStr) {
   if (reportMode === "district") return renderDistrictReport(idxStr);
+  if (reportMode === "land_use") return renderLandUseReport();
   return renderTodReport(idxStr);
+}
+
+// --- Value by Land Use --------------------------------------------------
+
+let landUseSummary = null;
+const luSelected = new Set();   // currently-checked land-use categories
+let luInitialized = false;       // true once we've seeded the default selection
+let luMetric = "tot_val";        // "tot_val" | "impr_val" | "land_val"
+
+const LU_METRIC_LABELS = {
+  tot_val:  "Total value",
+  impr_val: "Improvement value",
+  land_val: "Taxable land value",
+};
+
+async function loadLandUseSummary() {
+  if (landUseSummary) return landUseSummary;
+  const r = await fetch("data/land_use_value_summary.json");
+  landUseSummary = await r.json();
+  return landUseSummary;
+}
+
+async function renderLandUseReport() {
+  const content = document.getElementById("report-content");
+  const data = await loadLandUseSummary();
+  const totals = data.totals;
+  const cats   = data.by_land_use;
+
+  // Seed default = everything checked, but only on the very first render.
+  // (Otherwise "Clear" would race against this fallback.)
+  if (!luInitialized) {
+    cats.forEach(c => luSelected.add(c.land_use));
+    luInitialized = true;
+  }
+
+  const metricTotal = totals[luMetric] || 0;
+  const metricLabel = LU_METRIC_LABELS[luMetric];
+
+  const rowsHtml = cats.map(c => {
+    const v = c[luMetric] || 0;
+    const pct = metricTotal > 0 ? (v / metricTotal * 100) : 0;
+    const checked = luSelected.has(c.land_use) ? "checked" : "";
+    return `
+      <label class="lu-row">
+        <input type="checkbox" data-lu="${escapeAttr(c.land_use)}" ${checked} />
+        <span class="lu-name">${c.land_use}</span>
+        <span class="lu-share">${pct.toFixed(1)}%</span>
+        <span class="lu-money">${fmtMoney(v)}</span>
+      </label>`;
+  }).join("");
+
+  content.innerHTML = `
+    <p class="muted" style="margin:0 0 8px 0">
+      Toggle land uses to see their combined share of the city's appraised property value.
+      Citywide totals are from DCAD 2025 certified plus the latest Collin and Denton CAD rolls,
+      across all ${fmt(totals.parcels)} parcels.
+    </p>
+
+    <div class="lu-metric-bar">
+      <label class="lu-metric-opt"><input type="radio" name="lu-metric" value="tot_val"  ${luMetric==="tot_val"?"checked":""}/> Total</label>
+      <label class="lu-metric-opt"><input type="radio" name="lu-metric" value="impr_val" ${luMetric==="impr_val"?"checked":""}/> Improvement</label>
+      <label class="lu-metric-opt"><input type="radio" name="lu-metric" value="land_val" ${luMetric==="land_val"?"checked":""}/> Taxable land</label>
+    </div>
+
+    <div class="lu-selector-actions">
+      <button type="button" id="lu-select-all" class="lu-mini-btn">Select all</button>
+      <button type="button" id="lu-select-none" class="lu-mini-btn">Clear</button>
+    </div>
+
+    <div class="lu-header">
+      <span class="lu-name">Land use</span>
+      <span class="lu-share">% of ${luMetric === "tot_val" ? "value" : luMetric === "impr_val" ? "imp" : "land"}</span>
+      <span class="lu-money">${metricLabel}</span>
+    </div>
+    <div id="lu-list">${rowsHtml}</div>
+
+    <div id="lu-summary" class="lu-summary"></div>
+  `;
+
+  // Wire up
+  content.querySelectorAll('input[data-lu]').forEach(cb => {
+    cb.addEventListener("change", () => {
+      const k = cb.dataset.lu;
+      if (cb.checked) luSelected.add(k); else luSelected.delete(k);
+      updateLandUseSummary();
+    });
+  });
+  content.querySelectorAll('input[name="lu-metric"]').forEach(rb => {
+    rb.addEventListener("change", () => {
+      if (rb.checked) {
+        luMetric = rb.value;
+        renderLandUseReport();   // re-render to refresh share column + summary
+      }
+    });
+  });
+  document.getElementById("lu-select-all").addEventListener("click", () => {
+    cats.forEach(c => luSelected.add(c.land_use));
+    renderLandUseReport();
+  });
+  document.getElementById("lu-select-none").addEventListener("click", () => {
+    luSelected.clear();
+    renderLandUseReport();
+  });
+
+  updateLandUseSummary();
+}
+
+function updateLandUseSummary() {
+  if (!landUseSummary) return;
+  const totals = landUseSummary.totals;
+  let p = 0, a = 0, t = 0, i = 0, l = 0;
+  // Selected categories, sorted by their value/acre for the chosen metric, descending
+  const selectedRows = [];
+  for (const c of landUseSummary.by_land_use) {
+    if (luSelected.has(c.land_use)) {
+      p += c.parcels;  a += c.acres;
+      t += c.tot_val;  i += c.impr_val;  l += c.land_val;
+      const v = c[luMetric] || 0;
+      const ppa = c.acres > 0 ? v / c.acres : 0;
+      selectedRows.push({ name: c.land_use, ppa });
+    }
+  }
+  selectedRows.sort((x, y) => y.ppa - x.ppa);
+
+  const pPct = totals.parcels  > 0 ? p / totals.parcels  * 100 : 0;
+  const aPct = totals.acres    > 0 ? a / totals.acres    * 100 : 0;
+  const tPct = totals.tot_val  > 0 ? t / totals.tot_val  * 100 : 0;
+  const iPct = totals.impr_val > 0 ? i / totals.impr_val * 100 : 0;
+  const lPct = totals.land_val > 0 ? l / totals.land_val * 100 : 0;
+
+  const n = luSelected.size;
+  const summary = document.getElementById("lu-summary");
+  if (!summary) return;
+
+  const ppaSection = selectedRows.length
+    ? `
+      <div class="lu-stat-spacer"></div>
+      <h3 class="lu-summary-title">Avg ${LU_METRIC_LABELS[luMetric].toLowerCase()} / acre, by use</h3>
+      ${selectedRows.map(r => `
+        <div class="lu-ppa-row">
+          <span class="lu-ppa-name">${r.name}</span>
+          <span class="lu-ppa-val">${fmtMoney(Math.round(r.ppa))} / acre</span>
+        </div>
+      `).join("")}
+    `
+    : "";
+
+  summary.innerHTML = `
+    <h3 class="lu-summary-title">${n === 0 ? "No land uses selected" : `${n} land use${n === 1 ? "" : "s"} selected`}</h3>
+    <div class="lu-stat"><span class="lu-stat-label">Parcels</span><span class="lu-stat-val">${fmt(p)}</span><span class="lu-stat-pct">${pPct.toFixed(1)}%</span></div>
+    <div class="lu-stat"><span class="lu-stat-label">Acres</span><span class="lu-stat-val">${fmt(Math.round(a))}</span><span class="lu-stat-pct">${aPct.toFixed(1)}%</span></div>
+    <div class="lu-stat-spacer"></div>
+    <div class="lu-stat"><span class="lu-stat-label">Total value</span><span class="lu-stat-val">${fmtMoney(t)}</span><span class="lu-stat-pct">${tPct.toFixed(1)}%</span></div>
+    <div class="lu-stat"><span class="lu-stat-label">Improvement value</span><span class="lu-stat-val">${fmtMoney(i)}</span><span class="lu-stat-pct">${iPct.toFixed(1)}%</span></div>
+    <div class="lu-stat"><span class="lu-stat-label">Taxable land value</span><span class="lu-stat-val">${fmtMoney(l)}</span><span class="lu-stat-pct">${lPct.toFixed(1)}%</span></div>
+    ${ppaSection}
+  `;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
 function renderTodReport(idxStr) {

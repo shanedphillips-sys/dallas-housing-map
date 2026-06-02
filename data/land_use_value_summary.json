@@ -1,0 +1,155 @@
+{
+  "totals": {
+    "parcels": 291925,
+    "acres": 185895.9,
+    "tot_val": 247369502876,
+    "impr_val": 158674923015,
+    "land_val": 88694579859
+  },
+  "by_land_use": [
+    {
+      "land_use": "Single Family",
+      "parcels": 221509,
+      "acres": 53661.6,
+      "tot_val": 124127032472,
+      "impr_val": 72383343098,
+      "land_val": 51743689374
+    },
+    {
+      "land_use": "Commercial",
+      "parcels": 14909,
+      "acres": 26621.0,
+      "tot_val": 42224035897,
+      "impr_val": 29606263821,
+      "land_val": 12617772077
+    },
+    {
+      "land_use": "MF 50+ Units",
+      "parcels": 1119,
+      "acres": 7273.9,
+      "tot_val": 33485323264,
+      "impr_val": 27925873992,
+      "land_val": 5559449272
+    },
+    {
+      "land_use": "Institutional",
+      "parcels": 3142,
+      "acres": 20160.8,
+      "tot_val": 20490671490,
+      "impr_val": 14421766615,
+      "land_val": 6068904871
+    },
+    {
+      "land_use": "Other",
+      "parcels": 4843,
+      "acres": 23199.1,
+      "tot_val": 5990070013,
+      "impr_val": 4362680120,
+      "land_val": 1627389893
+    },
+    {
+      "land_use": "Vacant - Commercial",
+      "parcels": 13321,
+      "acres": 39610.8,
+      "tot_val": 5383204429,
+      "impr_val": 76138590,
+      "land_val": 5307065839
+    },
+    {
+      "land_use": "Townhouses",
+      "parcels": 7879,
+      "acres": 515.7,
+      "tot_val": 4065585557,
+      "impr_val": 3182059824,
+      "land_val": 883525734
+    },
+    {
+      "land_use": "Duplexes",
+      "parcels": 7623,
+      "acres": 1174.7,
+      "tot_val": 3863535324,
+      "impr_val": 2417192957,
+      "land_val": 1446342367
+    },
+    {
+      "land_use": "Vacant - Single Family",
+      "parcels": 13558,
+      "acres": 5301.1,
+      "tot_val": 1727273856,
+      "impr_val": 129355490,
+      "land_val": 1597918366
+    },
+    {
+      "land_use": "MF Apartments (Unclassified)",
+      "parcels": 170,
+      "acres": 532.1,
+      "tot_val": 1715625314,
+      "impr_val": 1534492986,
+      "land_val": 181132328
+    },
+    {
+      "land_use": "MF 20-49 Units",
+      "parcels": 411,
+      "acres": 374.6,
+      "tot_val": 1444825432,
+      "impr_val": 1034506732,
+      "land_val": 410318700
+    },
+    {
+      "land_use": "Industrial",
+      "parcels": 303,
+      "acres": 1480.1,
+      "tot_val": 1113846500,
+      "impr_val": 795952060,
+      "land_val": 317894440
+    },
+    {
+      "land_use": "MF 5-19 Units",
+      "parcels": 716,
+      "acres": 216.5,
+      "tot_val": 961681820,
+      "impr_val": 615089070,
+      "land_val": 346592750
+    },
+    {
+      "land_use": "MF 3-4 Units",
+      "parcels": 489,
+      "acres": 93.9,
+      "tot_val": 300161650,
+      "impr_val": 161794270,
+      "land_val": 138367380
+    },
+    {
+      "land_use": "Vacant - Industrial",
+      "parcels": 1466,
+      "acres": 2613.0,
+      "tot_val": 281625339,
+      "impr_val": 4349470,
+      "land_val": 277275869
+    },
+    {
+      "land_use": "Open Space",
+      "parcels": 285,
+      "acres": 3011.0,
+      "tot_val": 163583839,
+      "impr_val": 4244100,
+      "land_val": 159339739
+    },
+    {
+      "land_use": "SFR Condominiums",
+      "parcels": 37,
+      "acres": 4.3,
+      "tot_val": 22635690,
+      "impr_val": 18131050,
+      "land_val": 4504640
+    },
+    {
+      "land_use": "Mobile Home",
+      "parcels": 145,
+      "acres": 51.6,
+      "tot_val": 8784990,
+      "impr_val": 1688770,
+      "land_val": 7096220
+    }
+  ]
+}

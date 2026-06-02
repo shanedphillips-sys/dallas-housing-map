@@ -128,6 +128,17 @@ LAND_USE_MAP = {
 }
 gdf["land_use_cat"] = gdf["LAND_SPTD_DESC"].map(LAND_USE_MAP).fillna("Other")
 
+# Promote totally-exempt commercial / industrial / other parcels to
+# "Institutional" so schools, churches, government buildings, hospitals,
+# etc. don't show up as Commercial on the land-use map. Residential exempt
+# parcels (Land Bank homes, public housing) are intentionally left in
+# their housing categories so housing analysis stays consistent.
+_inst_mask = (gdf["totexempt"] == "X") & gdf["land_use_cat"].isin(
+    ["Commercial", "Industrial", "Other"]
+)
+gdf.loc[_inst_mask, "land_use_cat"] = "Institutional"
+log(f"  Reclassified {int(_inst_mask.sum()):,} totally-exempt parcels as Institutional")
+
 # ---------------------------------------------------------------------------
 # 3b. Merge DCAD appraisal values (TOT_VAL / IMPR_VAL / LAND_VAL)
 #     from ACCOUNT_APPRL_YEAR.CSV in the DCAD2025_CERTIFIED folder.

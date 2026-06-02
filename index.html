@@ -142,59 +142,89 @@
             </label>
           </div>
 
-          <div class="layer-toggle">
+          <div class="layer-toggle layer-toggle-value">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
               <input type="checkbox" data-layer="value_per_acre" />
               <span>Total value per acre (3D)</span>
             </label>
+            <div class="value-cap-controls">
+              <label class="radio-option">
+                <input type="checkbox" data-value-cap checked />
+                <span>Cap heights at $100M/acre</span>
+              </label>
+            </div>
           </div>
 
-          <div class="layer-toggle">
+          <div class="layer-toggle layer-toggle-value">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
               <input type="checkbox" data-layer="impr_per_acre" />
               <span>Improvement value per acre (3D)</span>
             </label>
+            <div class="value-cap-controls">
+              <label class="radio-option">
+                <input type="checkbox" data-value-cap checked />
+                <span>Cap heights at $100M/acre</span>
+              </label>
+            </div>
           </div>
 
-          <div class="layer-toggle">
+          <div class="layer-toggle layer-toggle-value">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
               <input type="checkbox" data-layer="land_per_acre" />
               <span>Taxable land value per acre (3D)</span>
             </label>
+            <div class="value-cap-controls">
+              <label class="radio-option">
+                <input type="checkbox" data-value-cap checked />
+                <span>Cap heights at $100M/acre</span>
+              </label>
+            </div>
           </div>
 
-          <div class="layer-toggle">
+          <div class="layer-toggle layer-toggle-grouped">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
-              <input type="checkbox" data-layer="block_groups" />
-              <span>Population change 2010-2020 (block group)</span>
+              <input type="checkbox" data-layer-group="pop_change" />
+              <span>Population change 2010-2020</span>
             </label>
+            <div class="grouped-controls">
+              <label class="radio-option">
+                <input type="radio" name="pop_change_level" value="bg" checked />
+                <span>Block group</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="pop_change_level" value="tract" />
+                <span>Tract</span>
+              </label>
+            </div>
           </div>
 
-          <div class="layer-toggle">
+          <div class="layer-toggle layer-toggle-grouped">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
-              <input type="checkbox" data-layer="tracts" />
-              <span>Population change 2010-2020 (tract)</span>
+              <input type="checkbox" data-layer-group="hu_change" />
+              <span>Housing unit change 2010-2020</span>
             </label>
+            <div class="grouped-controls">
+              <label class="radio-option">
+                <input type="radio" name="hu_change_level" value="bg" checked />
+                <span>Block group</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="hu_change_level" value="tract" />
+                <span>Tract</span>
+              </label>
+            </div>
           </div>
 
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
-              <input type="checkbox" data-layer="bg_hu" />
-              <span>Housing unit change 2010-2020 (block group)</span>
-            </label>
-          </div>
-
-          <div class="layer-toggle">
-            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <label>
-              <input type="checkbox" data-layer="tract_hu" />
-              <span>Housing unit change 2010-2020 (tract)</span>
+              <input type="checkbox" data-layer="jobs_density" />
+              <span>Job density (workplace) 2022</span>
             </label>
           </div>
 
@@ -208,6 +238,9 @@
         </button>
         <button id="open-district-report" class="report-button" type="button" style="margin-top:6px">
           Council Districts
+        </button>
+        <button id="open-land-use-report" class="report-button" type="button" style="margin-top:6px">
+          Value by Land Use
         </button>
       </section>
 
