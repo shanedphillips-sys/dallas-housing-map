@@ -1,0 +1,4 @@
+# Raw Zillow monthly ZIP files — large (the ZHVI file is ~122 MB, over GitHub's
+# 100 MB hard limit). We commit only the slim derived data/zillow_zip.geojson;
+# regenerate it with build_zillow_zip.py from these source CSVs.
+data/Zip_*.csv

@@ -461,12 +461,9 @@ const LAYERS = {
       </div>
     `,
     clickLayer: "council-fill",
-    legend: () => `
-      <div class="legend-block">
-        <h3>Council Districts</h3>
-        <div class="swatch-row"><span class="line-swatch"></span> District boundary</div>
-      </div>
-    `,
+    legendGroup: "Jurisdiction boundaries",
+    legendOrder: 3,
+    legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-color:#2A2A2A"></span>City Council Districts</div>`,
   },
 
   city_boundary: {
@@ -484,15 +481,9 @@ const LAYERS = {
     },
     popup: () => `<div class="popup-title">City of Dallas</div>`,
     clickLayer: null,
-    legend: () => `
-      <div class="legend-block">
-        <h3>City of Dallas</h3>
-        <div class="swatch-row">
-          <span class="line-swatch" style="border-top-width:2px;border-top-color:#222222"></span>
-          City boundary
-        </div>
-      </div>
-    `,
+    legendGroup: "Jurisdiction boundaries",
+    legendOrder: 1,
+    legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-width:2px;border-top-color:#222222"></span>City of Dallas</div>`,
   },
 
   zoning: {
@@ -1214,7 +1205,28 @@ function refreshLegend() {
     return;
   }
   wrapper.classList.remove("empty");
-  content.innerHTML = enabled.map(([k, v]) => v.legend()).join("");
+  // Layers sharing a legendGroup collapse into one block (e.g. jurisdiction
+  // boundaries). The block sits where the group's first enabled layer falls;
+  // rows are ordered by legendOrder. Everything else uses its own legend() block.
+  const blocks = [];
+  const groupRows = {};
+  for (const [k, v] of enabled) {
+    if (v.legendGroup) {
+      if (!(v.legendGroup in groupRows)) {
+        groupRows[v.legendGroup] = [];
+        blocks.push({ group: v.legendGroup });
+      }
+      groupRows[v.legendGroup].push({ o: v.legendOrder ?? 0, html: v.legendRow() });
+    } else {
+      blocks.push({ html: v.legend() });
+    }
+  }
+  content.innerHTML = blocks.map((b) =>
+    b.group
+      ? `<div class="legend-block"><h3>${b.group}</h3>` +
+        groupRows[b.group].sort((a, c) => a.o - c.o).map((r) => r.html).join("") + `</div>`
+      : b.html
+  ).join("");
 }
 
 
@@ -1297,9 +1309,14 @@ function applyLayerOrder() {
       const groupMap = {
         pop_change: { bg: "block_groups", tract: "tracts" },
         hu_change:  { bg: "bg_hu",        tract: "tract_hu" },
+        value3d:    { total: "value_per_acre", improvement: "impr_per_acre", land: "land_per_acre" },
       }[group];
-      const rb = document.querySelector(`input[name="${group}_level"]:checked`);
-      if (groupMap && rb) key = groupMap[rb.value];
+      if (groupMap) {
+        const rb = document.querySelector(`input[name="${group}_level"]:checked`);
+        if (rb) key = groupMap[rb.value];
+      } else {
+        key = group;   // rent_change / value_change map directly to a LAYERS entry
+      }
     }
     const layer = LAYERS[key];
     if (!layer) continue;
@@ -1433,6 +1450,8 @@ map.on("load", async () => {
 
   initReports();
   initPermits();
+  initChangeLayers();
+  initValue3d();
 
   // Legend collapse / expand
   const legendEl = document.getElementById("legend");
@@ -2375,4 +2394,522 @@ function renderDistrictReport(idxStr) {
     ${singlePctBlock("Building floor-area ratio (FAR)", d.far_pct, FAR_ORDER, FAR_COLOR_FN)}
     ${singlePctBlock("Decade built",    d.decade_pct,    DECADE_ORDER, DECADE_COLOR_FN)}
   `;
+}
+
+
+// ============================================================================
+// County boundaries + Rent / Home-value change layers
+// ============================================================================
+
+// ---- County boundaries (dissolved 7-county outlines) -----------------------
+LAYERS.counties = {
+  label: "County boundaries",
+  sourceId: "counties-src",
+  sourceFile: "data/counties.geojson",
+  layerIds: ["counties-line", "counties-label"],
+  addLayers: () => {
+    map.addLayer({
+      id: "counties-line",
+      type: "line",
+      source: "counties-src",
+      paint: {
+        "line-color": "#3A3A3A",
+        "line-width": 1.6,
+        "line-dasharray": [3, 1.5],
+        "line-opacity": 0.85,
+      },
+    });
+    map.addLayer({
+      id: "counties-label",
+      type: "symbol",
+      source: "counties-src",
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 13,
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.12,
+      },
+      paint: {
+        "text-color": "#555555",
+        "text-halo-color": "#FFFFFF",
+        "text-halo-width": 1.6,
+      },
+    });
+  },
+  popup: () => "",
+  clickLayer: null,
+  legendGroup: "Jurisdiction boundaries",
+  legendOrder: 2,
+  legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-style:dashed;border-top-color:#3A3A3A"></span>Counties</div>`,
+};
+
+
+// ---- Rent / Home-value change (ACS tract + Zillow ZIP) ---------------------
+// Each metric ("rent", "value") is one grouped toggle that switches between an
+// ACS tract source and a Zillow ZIP source, offers $-change / %-change, and a
+// dual-thumb year slider. All values are constant 2024 dollars (deflated in the
+// Python build), so % change is real (inflation-stripped) growth.
+
+const RV_NODATA = "rgba(0,0,0,0)";   // metric absent for a feature -> background
+const RV_MAX_MOE = 0.30;             // ACS: gray a tract-year if MOE/est exceeds this (keep in sync with MAX_MOE_RATIO in build_acs_rent_value.py)
+
+// Diverging palettes: reds = real loss, cream = stable, blues = real gain.
+// Asymmetric (real housing costs mostly rose), so the gain side is finer.
+const RV_PAL6 = ["#D64550", "#F4A6A6", "#FAF5C5", "#A6CDE3", "#4A90A4", "#1D4F66"];            // 2 loss + stable + 3 gain
+const RV_PAL7 = ["#D64550", "#F4A6A6", "#FAF5C5", "#A6CDE3", "#4A90A4", "#2E6F86", "#1D4F66"]; // 2 loss + stable + 4 gain
+
+// Per (metric, mode): bin edges, the matching bin labels, and colors. Shared
+// across sources so ACS and Zillow read comparably. colors.length === edges
+// length + 1. Constant 2024$ / real %.
+const RV_SCHEME = {
+  rent: {
+    dollar: {
+      edges:  [-300, -100, 100, 300, 500],
+      labels: ["Loss > $300", "Loss $100–$300", "Stable (±$100)",
+               "Gain $100–$300", "Gain $300–$500", "Gain > $500"],
+      colors: RV_PAL6,
+    },
+    pct: {
+      edges:  [-15, -5, 5, 15, 30, 50],
+      labels: ["Loss > 15%", "Loss 5–15%", "Stable (±5%)",
+               "Gain 5–15%", "Gain 15–30%", "Gain 30–50%", "Gain > 50%"],
+      colors: RV_PAL7,
+    },
+  },
+  value: {
+    dollar: {
+      edges:  [-50000, -15000, 15000, 100000, 250000, 450000],
+      labels: ["Loss > $50k", "Loss $15k–$50k", "Stable (±$15k)",
+               "Gain $15k–$100k", "Gain $100k–$250k", "Gain $250k–$450k", "Gain > $450k"],
+      colors: RV_PAL7,
+    },
+    pct: {
+      edges:  [-15, -5, 5, 25, 60, 100],
+      labels: ["Loss > 15%", "Loss 5–15%", "Stable (±5%)",
+               "Gain 5–25%", "Gain 25–60%", "Gain 60–100%", "Gain > 100%"],
+      colors: RV_PAL7,
+    },
+  },
+};
+
+// metric -> source -> GeoJSON property-key prefix
+const RV_KEY = {
+  rent:  { acs: "rent", zillow: "zori" },
+  value: { acs: "val",  zillow: "zhvi" },
+};
+
+const RV_SOURCES = {
+  acs:    { srcId: "acs-rv-src",     file: "data/acs_rent_value_tracts.geojson" },
+  zillow: { srcId: "zillow-zip-src", file: "data/zillow_zip.geojson" },
+};
+
+// Slider range per (metric, source). ACS = 2012-2024. Zillow home value (ZHVI)
+// goes back to 2010; Zillow rent (ZORI) only exists from 2015, so its floor is
+// 2015 (no earlier data exists at all).
+function rvRange(metric, source) {
+  if (source === "acs") return { min: 2012, max: 2024 };
+  if (metric === "rent") return { min: 2015, max: 2025 };
+  return { min: 2010, max: 2025 };
+}
+
+const rvState = {
+  rent:  { master: false, source: "acs", mode: "dollar", yearStart: 2012, yearEnd: 2024, added: false },
+  value: { master: false, source: "acs", mode: "dollar", yearStart: 2012, yearEnd: 2024, added: false },
+};
+
+// Null-safe presence test. Properties are present-with-null in the GeoJSON, so
+// `has` can't distinguish them — coalesce to a sentinel and compare.
+const RV_SENTINEL = -1e15;
+function rvMissing(key) {
+  return ["==", ["coalesce", ["get", key], RV_SENTINEL], RV_SENTINEL];
+}
+function rvPresent(key) { return ["!", rvMissing(key)]; }
+
+// ACS reliability (matches the build): a tract-year is reliable if it has both an
+// estimate and a MOE, and MOE/estimate <= RV_MAX_MOE. Unreliable cells render
+// gray, like low-density tracts in the pop/HU change layers.
+function rvAcsReliable(metric, year) {
+  const pfx = RV_KEY[metric].acs;
+  const estKey = `${pfx}_${year}`, moeKey = `${pfx}_moe_${year}`;
+  return ["all",
+    rvPresent(estKey), rvPresent(moeKey),
+    ["<=", ["to-number", ["get", moeKey]], ["*", RV_MAX_MOE, ["to-number", ["get", estKey]]]]];
+}
+
+function rvChangeExpr(metric, source) {
+  const st = rvState[metric];
+  const pfx = RV_KEY[metric][source];
+  const s = ["to-number", ["get", `${pfx}_${st.yearStart}`]];
+  const e = ["to-number", ["get", `${pfx}_${st.yearEnd}`]];
+  return st.mode === "pct"
+    ? ["/", ["*", 100, ["-", e, s]], s]
+    : ["-", e, s];
+}
+
+function rvStepExpr(metric, source) {
+  const sc = RV_SCHEME[metric][rvState[metric].mode];
+  const step = ["step", rvChangeExpr(metric, source), sc.colors[0]];
+  for (let i = 0; i < sc.edges.length; i++) step.push(sc.edges[i], sc.colors[i + 1]);
+  return step;
+}
+
+function rvFillColor(metric, source) {
+  const st = rvState[metric];
+  const pfx = RV_KEY[metric][source];
+  if (source === "zillow") {
+    const missingEither = ["any",
+      rvMissing(`${pfx}_${st.yearStart}`), rvMissing(`${pfx}_${st.yearEnd}`)];
+    const hasKey = metric === "rent" ? "has_zori" : "has_zhvi";
+    return ["case",
+      ["!", ["coalesce", ["get", hasKey], false]], RV_NODATA,  // no data ever -> background
+      missingEither, RV_NODATA,                                 // covered, but not this range (hatch draws over)
+      rvStepExpr(metric, "zillow")];
+  }
+  // ACS: gray where either endpoint is unreliable (MOE > 30% of the estimate, or missing).
+  const unreliable = ["any",
+    ["!", rvAcsReliable(metric, st.yearStart)],
+    ["!", rvAcsReliable(metric, st.yearEnd)]];
+  return ["case", unreliable, LOW_DENS_COLOR, rvStepExpr(metric, "acs")];
+}
+
+// Zillow cross-hatch: ZIPs that HAVE the metric but lack a value at the chosen
+// start or end year (their series begins after the chosen start).
+function rvHatchFilter(metric) {
+  const st = rvState[metric];
+  const pfx = RV_KEY[metric].zillow;
+  const hasKey = metric === "rent" ? "has_zori" : "has_zhvi";
+  return ["all",
+    ["coalesce", ["get", hasKey], false],
+    ["any", rvMissing(`${pfx}_${st.yearStart}`), rvMissing(`${pfx}_${st.yearEnd}`)]];
+}
+function rvZipHasFilter(metric) {
+  return ["coalesce", ["get", metric === "rent" ? "has_zori" : "has_zhvi"], false];
+}
+
+// Crossing-diagonal hatch image (distinct from the vacant single-stripe), used
+// for Zillow ZIPs whose series starts after the chosen start year.
+function ensureCrossHatchImage() {
+  if (map.hasImage("cross-hatch")) return;
+  const size = 8;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = "#555555";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(-1, size + 1);        ctx.lineTo(size + 1, -1);
+  ctx.moveTo(-1 - size, size + 1); ctx.lineTo(1, -1);
+  ctx.moveTo(size - 1, size + 1);  ctx.lineTo(2 * size + 1, -1);
+  ctx.moveTo(-1, -1);              ctx.lineTo(size + 1, size + 1);
+  ctx.moveTo(size - 1, -1);        ctx.lineTo(2 * size + 1, size + 1);
+  ctx.moveTo(-1 - size, -1);       ctx.lineTo(1, size + 1);
+  ctx.stroke();
+  map.addImage("cross-hatch", ctx.getImageData(0, 0, size, size), { pixelRatio: 1 });
+}
+
+const rvSourcesAdded = new Set();
+async function ensureRVSource(source) {
+  const def = RV_SOURCES[source];
+  if (rvSourcesAdded.has(def.srcId) || map.getSource(def.srcId)) {
+    rvSourcesAdded.add(def.srcId);
+    return;
+  }
+  const r = await fetch(def.file);
+  map.addSource(def.srcId, { type: "geojson", data: await r.json() });
+  rvSourcesAdded.add(def.srcId);
+}
+
+function addRVLayers(metric) {
+  const st = rvState[metric];
+  if (st.added) return;
+  ensureCrossHatchImage();
+  map.addLayer({ id: `${metric}-acs-fill`, type: "fill", source: "acs-rv-src",
+    layout: { visibility: "none" },
+    paint: { "fill-color": rvFillColor(metric, "acs"), "fill-opacity": 0.78 } },
+    beneathTopLayers());
+  map.addLayer({ id: `${metric}-acs-outline`, type: "line", source: "acs-rv-src",
+    layout: { visibility: "none" },
+    paint: { "line-color": "#FFFFFF", "line-width": 0.4, "line-opacity": 0.6 } },
+    beneathTopLayers());
+  map.addLayer({ id: `${metric}-zip-fill`, type: "fill", source: "zillow-zip-src",
+    layout: { visibility: "none" },
+    paint: { "fill-color": rvFillColor(metric, "zillow"), "fill-opacity": 0.78 } },
+    beneathTopLayers());
+  map.addLayer({ id: `${metric}-zip-hatch`, type: "fill", source: "zillow-zip-src",
+    layout: { visibility: "none" }, filter: rvHatchFilter(metric),
+    paint: { "fill-pattern": "cross-hatch", "fill-opacity": 0.9 } },
+    beneathTopLayers());
+  map.addLayer({ id: `${metric}-zip-outline`, type: "line", source: "zillow-zip-src",
+    layout: { visibility: "none" }, filter: rvZipHasFilter(metric),
+    paint: { "line-color": "#FFFFFF", "line-width": 0.5, "line-opacity": 0.6 } },
+    beneathTopLayers());
+
+  for (const t of [`${metric}-acs-fill`, `${metric}-zip-fill`]) {
+    map.on("click", t, (e) => {
+      const f = e.features?.[0];
+      if (!f) return;
+      new maplibregl.Popup({ closeButton: true })
+        .setLngLat(e.lngLat).setHTML(rvPopup(metric, f.properties)).addTo(map);
+    });
+    map.on("mouseenter", t, () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", t, () => map.getCanvas().style.cursor = "");
+  }
+  st.added = true;
+  LAYERS[`${metric}_change`].layerIds.forEach((id) => layersAdded.add(id));
+}
+
+function applyRV(metric) {
+  const st = rvState[metric];
+  const show = (id, vis) => { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis ? "visible" : "none"); };
+  const acsVis = st.master && st.source === "acs";
+  const zipVis = st.master && st.source === "zillow";
+  show(`${metric}-acs-fill`, acsVis);
+  show(`${metric}-acs-outline`, acsVis);
+  show(`${metric}-zip-fill`, zipVis);
+  show(`${metric}-zip-hatch`, zipVis);
+  show(`${metric}-zip-outline`, zipVis);
+  if (st.added) {
+    if (acsVis) {
+      map.setPaintProperty(`${metric}-acs-fill`, "fill-color", rvFillColor(metric, "acs"));
+    }
+    if (zipVis) {
+      map.setPaintProperty(`${metric}-zip-fill`, "fill-color", rvFillColor(metric, "zillow"));
+      map.setFilter(`${metric}-zip-hatch`, rvHatchFilter(metric));
+    }
+  }
+  LAYERS[`${metric}_change`].enabled = st.master;
+  refreshLegend();
+}
+
+async function enableRV(metric) {
+  // Both sources are referenced by addRVLayers, so both must exist first.
+  await Promise.all([ensureRVSource("acs"), ensureRVSource("zillow")]);
+  addRVLayers(metric);
+  applyRV(metric);
+  applyLayerOrder();
+}
+
+// ---- Change-layer popup + legend -------------------------------------------
+function rvFmtMoney(v) { return v == null ? "—" : "$" + Number(v).toLocaleString(); }
+
+function rvChangeRow(sVal, eVal) {
+  const ch = eVal - sVal;
+  const pct = sVal > 0 ? (ch / sVal) * 100 : null;
+  const cls = ch > 0 ? "positive" : ch < 0 ? "negative" : "";
+  const sign = ch > 0 ? "+" : ch < 0 ? "−" : "";
+  const pctStr = pct == null ? ""
+    : ` (${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct).toFixed(1)}%)`;
+  return `<div class="popup-row popup-change ${cls}">
+    <span class="label">Change (real)</span>
+    <span class="value">${sign}$${Math.abs(ch).toLocaleString()}${pctStr}</span>
+  </div>`;
+}
+
+// One ACS year row: estimate ± MOE (both 2024$), flagged "excluded" when the
+// MOE exceeds 30% of the estimate; "no estimate" when ACS has none.
+function rvAcsYearRow(year, est, moe, reliable) {
+  if (est == null) {
+    return `<div class="popup-row"><span class="label">${year}</span><span class="value" style="color:#999">no estimate</span></div>`;
+  }
+  const moeStr = moe != null ? ` ± ${rvFmtMoney(moe)}` : "";
+  const flag = reliable ? "" : ` <span style="color:#B5651D;font-size:11px">excluded</span>`;
+  return `<div class="popup-row"><span class="label">${year}</span><span class="value">${rvFmtMoney(est)}${moeStr}${flag}</span></div>`;
+}
+
+function rvPopup(metric, props) {
+  const st = rvState[metric];
+  const pfx = RV_KEY[metric][st.source];
+  const title = st.source === "acs"
+    ? `Tract ${props.geoid}`
+    : `ZIP ${props.zip}${props.city ? " · " + props.city : ""}`;
+  const metricLabel = metric === "rent"
+    ? (st.source === "acs" ? "Median gross rent · ACS 5-yr" : "Median rent · Zillow ZORI")
+    : (st.source === "acs" ? "Median home value · ACS 5-yr" : "Typical home value · Zillow ZHVI");
+  const header = `<div class="popup-title">${title}</div>` +
+    `<div class="popup-row" style="color:#666;font-size:11px;margin-bottom:4px">${metricLabel} · constant 2024$</div>`;
+
+  if (st.source === "acs") {
+    const sEst = props[`${pfx}_${st.yearStart}`] ?? null, sMoe = props[`${pfx}_moe_${st.yearStart}`] ?? null;
+    const eEst = props[`${pfx}_${st.yearEnd}`] ?? null,   eMoe = props[`${pfx}_moe_${st.yearEnd}`] ?? null;
+    const rel = (est, moe) => est != null && moe != null && moe <= RV_MAX_MOE * est;
+    const sRel = rel(sEst, sMoe), eRel = rel(eEst, eMoe);
+    const change = (sRel && eRel)
+      ? rvChangeRow(sEst, eEst)
+      : `<div class="popup-row popup-change"><span class="label">Change (real)</span><span class="value" style="color:#999">unavailable</span></div>`;
+    const note = ((sEst != null && !sRel) || (eEst != null && !eRel))
+      ? `<div class="popup-row" style="margin-top:4px;color:#888;font-size:11px">Estimate excluded because its margin of error exceeds 30% of the estimate.</div>`
+      : "";
+    return header
+      + rvAcsYearRow(st.yearStart, sEst, sMoe, sRel)
+      + rvAcsYearRow(st.yearEnd, eEst, eMoe, eRel)
+      + change + note;
+  }
+
+  // Zillow (no published MOE)
+  const sVal = props[`${pfx}_${st.yearStart}`] ?? null, eVal = props[`${pfx}_${st.yearEnd}`] ?? null;
+  let body;
+  if (sVal == null || eVal == null) {
+    const which = sVal == null ? st.yearStart : st.yearEnd;
+    body = `<div class="popup-row" style="margin-top:4px;color:#888;font-size:11px">No data for ${which} — series starts later (cross-hatched).</div>`;
+  } else {
+    body = rvChangeRow(sVal, eVal);
+  }
+  return header
+    + `<div class="popup-row"><span class="label">${st.yearStart}</span><span class="value">${rvFmtMoney(sVal)}</span></div>`
+    + `<div class="popup-row"><span class="label">${st.yearEnd}</span><span class="value">${rvFmtMoney(eVal)}</span></div>`
+    + body;
+}
+
+const RV_HATCH_SWATCH = "repeating-linear-gradient(45deg,#555 0 0.8px,transparent 0.8px 5px)," +
+                        "repeating-linear-gradient(-45deg,#555 0 0.8px,transparent 0.8px 5px)";
+
+function buildRVLegend(metric) {
+  const st = rvState[metric];
+  const sc = RV_SCHEME[metric][st.mode];
+  const rows = sc.colors
+    .map((c, i) => `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${sc.labels[i]}</div>`)
+    .join("");
+  const srcLabel = st.source === "acs" ? "ACS 5-yr · tract" : "Zillow · ZIP";
+  const metricName = metric === "rent" ? "Median rent" : "Home value";
+  const modeLabel = st.mode === "pct" ? "% change" : "$ change";
+  const noData = st.source === "zillow"
+    ? `<div class="swatch-row"><span class="swatch" style="background:${RV_HATCH_SWATCH}"></span>No data before ${st.yearStart}</div>`
+    : `<div class="swatch-row"><span class="swatch" style="background:${LOW_DENS_COLOR}"></span>No reliable estimate</div>`;
+  return `<div class="legend-block">
+    <h3>${metricName} change</h3>
+    <div class="muted" style="margin:-2px 0 5px 0">${srcLabel} · ${st.yearStart}→${st.yearEnd} · ${modeLabel} · real 2024$</div>
+    ${rows}
+    ${noData}
+  </div>`;
+}
+
+LAYERS.rent_change = {
+  label: "Median rent change",
+  layerIds: ["rent-acs-fill", "rent-acs-outline", "rent-zip-fill", "rent-zip-hatch", "rent-zip-outline"],
+  enabled: false,
+  legend: () => buildRVLegend("rent"),
+};
+LAYERS.value_change = {
+  label: "Median home value change",
+  layerIds: ["value-acs-fill", "value-acs-outline", "value-zip-fill", "value-zip-hatch", "value-zip-outline"],
+  enabled: false,
+  legend: () => buildRVLegend("value"),
+};
+
+// ---- Change-layer UI wiring (sliders + radios + master toggle) -------------
+function updateRVRangeBar(metric) {
+  const st = rvState[metric];
+  const s = document.getElementById(`${metric}-yr-start`);
+  const MIN = parseInt(s.min, 10), MAX = parseInt(s.max, 10);
+  const span = (MAX - MIN) || 1;
+  const left = ((st.yearStart - MIN) / span) * 100;
+  const right = ((st.yearEnd - MIN) / span) * 100;
+  const range = document.getElementById(`${metric}-yr-range`);
+  range.style.left = left + "%";
+  range.style.width = (right - left) + "%";
+  document.getElementById(`${metric}-yr-start-label`).textContent = st.yearStart;
+  document.getElementById(`${metric}-yr-end-label`).textContent = st.yearEnd;
+}
+
+function syncRVSlider(metric) {
+  const st = rvState[metric];
+  const { min, max } = rvRange(metric, st.source);
+  const s = document.getElementById(`${metric}-yr-start`);
+  const e = document.getElementById(`${metric}-yr-end`);
+  s.min = e.min = String(min);
+  s.max = e.max = String(max);
+  st.yearStart = min; st.yearEnd = max;       // snap to full range of the new source
+  s.value = String(min); e.value = String(max);
+  updateRVRangeBar(metric);
+}
+
+function initRVSlider(metric) {
+  const st = rvState[metric];
+  const s = document.getElementById(`${metric}-yr-start`);
+  const e = document.getElementById(`${metric}-yr-end`);
+  if (!s || !e) return;
+  s.addEventListener("input", () => {
+    let v = parseInt(s.value, 10);
+    if (v > st.yearEnd) { v = st.yearEnd; s.value = String(v); }
+    st.yearStart = v;
+    updateRVRangeBar(metric);
+    applyRV(metric);
+  });
+  e.addEventListener("input", () => {
+    let v = parseInt(e.value, 10);
+    if (v < st.yearStart) { v = st.yearStart; e.value = String(v); }
+    st.yearEnd = v;
+    updateRVRangeBar(metric);
+    applyRV(metric);
+  });
+  updateRVRangeBar(metric);
+}
+
+function initChangeLayers() {
+  for (const metric of ["rent", "value"]) {
+    const group = `${metric}_change`;
+    const cb = document.querySelector(`input[data-layer-group="${group}"]`);
+    if (!cb) continue;
+    cb.addEventListener("change", async () => {
+      rvState[metric].master = cb.checked;
+      if (cb.checked) {
+        cb.parentElement.classList.add("loading");
+        try { await enableRV(metric); }
+        finally { cb.parentElement.classList.remove("loading"); }
+      } else {
+        applyRV(metric);
+      }
+    });
+    document.querySelectorAll(`input[name="${group}_source"]`).forEach((rb) => {
+      rb.addEventListener("change", async () => {
+        if (!rb.checked) return;
+        rvState[metric].source = rb.value;
+        syncRVSlider(metric);
+        if (rvState[metric].master && !rvState[metric].added) {
+          cb.parentElement.classList.add("loading");
+          try { await enableRV(metric); }
+          finally { cb.parentElement.classList.remove("loading"); }
+        } else {
+          applyRV(metric);
+        }
+      });
+    });
+    document.querySelectorAll(`input[name="${group}_mode"]`).forEach((rb) => {
+      rb.addEventListener("change", () => {
+        if (!rb.checked) return;
+        rvState[metric].mode = rb.value;
+        applyRV(metric);
+      });
+    });
+    initRVSlider(metric);
+  }
+}
+
+// 3D property-value-per-acre layers: one grouped toggle (Total / Improvement /
+// Land radio) in place of three separate ones. The three underlying LAYERS
+// entries are mutually exclusive — switching the radio swaps which extrusion
+// shows; the shared "cap heights" checkbox is wired separately (data-value-cap).
+const VALUE3D_MAP = { total: "value_per_acre", improvement: "impr_per_acre", land: "land_per_acre" };
+function initValue3d() {
+  const cb = document.querySelector('input[data-layer-group="value3d"]');
+  if (!cb) return;
+  const selected = () => (document.querySelector('input[name="value3d_level"]:checked') || {}).value || "total";
+  async function apply() {
+    const sel = selected();
+    for (const [k, key] of Object.entries(VALUE3D_MAP)) {
+      const want = cb.checked && k === sel;
+      if (want && LAYERS[key] && !LAYERS[key].enabled) await enableLayer(key);
+      else if (!want && LAYERS[key] && LAYERS[key].enabled) disableLayer(key);
+    }
+  }
+  const run = async () => {
+    cb.parentElement.classList.add("loading");
+    try { await apply(); } finally { cb.parentElement.classList.remove("loading"); }
+  };
+  cb.addEventListener("change", run);
+  document.querySelectorAll('input[name="value3d_level"]').forEach((rb) => {
+    rb.addEventListener("change", () => { if (rb.checked && cb.checked) run(); });
+  });
 }

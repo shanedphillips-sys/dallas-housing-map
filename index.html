@@ -89,6 +89,14 @@
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
+              <input type="checkbox" data-layer="counties" checked />
+              <span>County boundaries</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
               <input type="checkbox" data-layer="rail_stops" checked />
               <span>Rail stations</span>
             </label>
@@ -142,45 +150,17 @@
             </label>
           </div>
 
-          <div class="layer-toggle layer-toggle-value">
+          <div class="layer-toggle layer-toggle-grouped layer-toggle-value">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
-              <input type="checkbox" data-layer="value_per_acre" />
-              <span>Total value per acre (3D)</span>
+              <input type="checkbox" data-layer-group="value3d" />
+              <span>Property value per acre (3D)</span>
             </label>
-            <div class="value-cap-controls">
-              <label class="radio-option">
-                <input type="checkbox" data-value-cap checked />
-                <span>Cap heights at $100M/acre</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="layer-toggle layer-toggle-value">
-            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <label>
-              <input type="checkbox" data-layer="impr_per_acre" />
-              <span>Improvement value per acre (3D)</span>
-            </label>
-            <div class="value-cap-controls">
-              <label class="radio-option">
-                <input type="checkbox" data-value-cap checked />
-                <span>Cap heights at $100M/acre</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="layer-toggle layer-toggle-value">
-            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <label>
-              <input type="checkbox" data-layer="land_per_acre" />
-              <span>Taxable land value per acre (3D)</span>
-            </label>
-            <div class="value-cap-controls">
-              <label class="radio-option">
-                <input type="checkbox" data-value-cap checked />
-                <span>Cap heights at $100M/acre</span>
-              </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="value3d_level" value="total" checked /><span>Total value</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="value3d_level" value="improvement" /><span>Improvement value</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="value3d_level" value="land" /><span>Land value</span></label>
+              <label class="radio-option" style="width:100%;margin-top:2px"><input type="checkbox" data-value-cap checked /><span>Cap heights at $100M/acre</span></label>
             </div>
           </div>
 
@@ -217,6 +197,62 @@
                 <input type="radio" name="hu_change_level" value="tract" />
                 <span>Tract</span>
               </label>
+            </div>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer-group="rent_change" />
+              <span>Median rent change</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <div class="control-row-label">Source</div>
+              <label class="radio-option"><input type="radio" name="rent_change_source" value="acs" checked /><span>ACS (tract)</span></label>
+              <label class="radio-option"><input type="radio" name="rent_change_source" value="zillow" /><span>Zillow (ZIP)</span></label>
+              <div class="control-row-label">Measure</div>
+              <label class="radio-option"><input type="radio" name="rent_change_mode" value="dollar" checked /><span>$ change</span></label>
+              <label class="radio-option"><input type="radio" name="rent_change_mode" value="pct" /><span>% change</span></label>
+              <div class="dual-slider-block">
+                <div class="dual-slider-labels">
+                  <span id="rent-yr-start-label">2012</span>
+                  <span id="rent-yr-end-label">2024</span>
+                </div>
+                <div class="dual-slider" id="rent-yr-slider">
+                  <span class="dual-slider-track"></span>
+                  <span class="dual-slider-range" id="rent-yr-range"></span>
+                  <input type="range" id="rent-yr-start" min="2012" max="2024" step="1" value="2012" />
+                  <input type="range" id="rent-yr-end"   min="2012" max="2024" step="1" value="2024" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer-group="value_change" />
+              <span>Median home value change</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <div class="control-row-label">Source</div>
+              <label class="radio-option"><input type="radio" name="value_change_source" value="acs" checked /><span>ACS (tract)</span></label>
+              <label class="radio-option"><input type="radio" name="value_change_source" value="zillow" /><span>Zillow (ZIP)</span></label>
+              <div class="control-row-label">Measure</div>
+              <label class="radio-option"><input type="radio" name="value_change_mode" value="dollar" checked /><span>$ change</span></label>
+              <label class="radio-option"><input type="radio" name="value_change_mode" value="pct" /><span>% change</span></label>
+              <div class="dual-slider-block">
+                <div class="dual-slider-labels">
+                  <span id="value-yr-start-label">2012</span>
+                  <span id="value-yr-end-label">2024</span>
+                </div>
+                <div class="dual-slider" id="value-yr-slider">
+                  <span class="dual-slider-track"></span>
+                  <span class="dual-slider-range" id="value-yr-range"></span>
+                  <input type="range" id="value-yr-start" min="2012" max="2024" step="1" value="2012" />
+                  <input type="range" id="value-yr-end"   min="2012" max="2024" step="1" value="2024" />
+                </div>
+              </div>
             </div>
           </div>
 

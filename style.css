@@ -310,6 +310,21 @@ html, body {
 .dual-slider input[type="range"]::-webkit-slider-runnable-track { background: transparent; }
 .dual-slider input[type="range"]::-moz-range-track { background: transparent; }
 
+/* Stacked grouped controls (rent / home-value change): labeled rows that wrap,
+   e.g. Source [ACS][Zillow] / Measure [$][%] / year slider. */
+.grouped-controls-stacked { flex-wrap: wrap; gap: 4px 10px; }
+.grouped-controls-stacked .control-row-label {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8A8A8A;
+}
+.grouped-controls-stacked .control-row-label:first-child { margin-top: 0; }
+.grouped-controls-stacked .dual-slider-block { width: 100%; }
+
 /* Reports section button */
 .report-button {
   width: 100%;
