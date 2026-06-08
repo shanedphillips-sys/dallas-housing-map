@@ -370,17 +370,21 @@ These are the choices we've iterated to — don't volunteer changes unless asked
 
 ## Current state
 
-- **Branch:** `main`. Last commit `662c934` "Add CLAUDE.md project context" is on
-  `origin/main`.
-- **Uncommitted (June 3, 2026 session):** county boundaries + Median rent change + Median
-  home value change layers. New files: `build_cpi.py`, `build_county_boundaries.py`,
-  `build_acs_rent_value.py`, `build_zillow_zip.py`, `.gitignore`, `.claude/launch.json`, and
-  `data/{counties,acs_rent_value_tracts,zillow_zip}.geojson`, `data/cpi_annual.json`. Edits
-  to `index.html`, `style.css`, `app.js`. All built and tested locally in the browser preview
-  (every source/measure/slider/popup path + cross-hatch verified). ACS layers carry a 30%-MOE
-  reliability filter (see methodology) that nulls noise-driven spurious declines.
-  **Not yet committed/pushed.**
-- **All layers and reports listed above are wired and tested locally.**
+- **Branch:** `main`, pushed to `origin/main`. The June 2026 session shipped in commit
+  `c53559f` "Add rent/value change layers, county boundaries, and UI refinements":
+  - County boundaries; Median rent change + Median home value change (ACS tract 2012–2024 ↔
+    Zillow ZIP, $/% + dual-thumb year slider, real 2024$); CPI-U deflation; ACS 2010→2020
+    tract harmonization.
+  - ACS reliability: the build ships estimate + MOE per cell; the webmap grays tract-years
+    with MOE/est > 30% ("No reliable estimate", `#B8B0A0`) and shows est ± MOE for both years
+    in popups with an exclusion note. Zillow late-starting series are cross-hatched.
+  - UI: the three 3D value layers are one grouped "Property value per acre (3D)" toggle
+    (Total / Improvement / Land radio); City/County/Council collapse into one "Jurisdiction
+    boundaries" legend block.
+- New build scripts (`build_cpi`, `build_county_boundaries`, `build_acs_rent_value`,
+  `build_zillow_zip`) + data (`counties`, `acs_rent_value_tracts`, `zillow_zip` GeoJSON,
+  `cpi_annual.json`). Raw Zillow CSVs are gitignored; `.claude/launch.json` is left untracked.
+- **Working tree clean; all layers and reports wired and tested.**
 
 ---
 
