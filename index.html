@@ -94,6 +94,20 @@
             </label>
           </div>
 
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" id="street-grid-master" />
+              <span>Street grid</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked" id="street-subrow" style="display:none">
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="streets_grid" /><span>Streets</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="streets_deadend" /><span>Dead-ends</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="alleys" /><span>Alleys</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="street_labels" /><span>Show street names</span></label>
+            </div>
+          </div>
+
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
@@ -113,17 +127,38 @@
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
-              <input type="checkbox" data-layer="parcels" />
-              <span>Assessor parcels</span>
+              <input type="checkbox" data-layer="buildings" />
+              <span>Building footprints</span>
             </label>
           </div>
 
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
+              <input type="checkbox" data-layer="parking" />
+              <span>Surface parking</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="parcels" />
+              <span>Assessor parcels</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
               <input type="checkbox" data-layer="zoning" />
               <span>Base zoning</span>
             </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="zoning_mode" value="category" checked /><span>By category</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="zoning_mode" value="sf" /><span>Single-family only</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="zoning_mode" value="all" /><span>Every zone</span></label>
+            </div>
           </div>
 
           <div class="layer-toggle">
@@ -137,8 +172,8 @@
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
-              <input type="checkbox" data-layer="far" />
-              <span>Building floor-area ratio</span>
+              <input type="checkbox" data-layer="far_footprint" />
+              <span>Building floor-area ratio (FAR)</span>
             </label>
           </div>
 
@@ -146,7 +181,15 @@
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
               <input type="checkbox" data-layer="decade_built" />
-              <span>Decade built</span>
+              <span>Decade structure built</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="imp_land_ratio" />
+              <span>Improvement / land value ratio</span>
             </label>
           </div>
 
@@ -167,8 +210,21 @@
           <div class="layer-toggle layer-toggle-grouped">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
+              <input type="checkbox" data-layer-group="value2d" />
+              <span>Property value per acre (2D)</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="value2d_level" value="total" checked /><span>Total value</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="value2d_level" value="improvement" /><span>Improvement value</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="value2d_level" value="land" /><span>Land value</span></label>
+            </div>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
               <input type="checkbox" data-layer-group="pop_change" />
-              <span>Population change 2010-2020</span>
+              <span>Population change</span>
             </label>
             <div class="grouped-controls">
               <label class="radio-option">
@@ -186,7 +242,7 @@
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
               <input type="checkbox" data-layer-group="hu_change" />
-              <span>Housing unit change 2010-2020</span>
+              <span>Housing unit change</span>
             </label>
             <div class="grouped-controls">
               <label class="radio-option">
@@ -260,8 +316,29 @@
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
               <input type="checkbox" data-layer="jobs_density" />
-              <span>Job density (workplace) 2022</span>
+              <span>Job density</span>
             </label>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="oi_earnings" />
+              <span>Expected adult earnings</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer-group="street_pattern" />
+              <span>Street pattern</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="street_pattern_metric" value="dendricity" checked /><span>Dendricity (tree-likeness)</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="street_pattern_metric" value="deadend" /><span>Dead-end share</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="street_pattern_metric" value="intersection" /><span>Intersection density</span></label>
+            </div>
           </div>
 
         </div>

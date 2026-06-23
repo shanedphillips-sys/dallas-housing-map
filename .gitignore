@@ -2,3 +2,7 @@
 # 100 MB hard limit). We commit only the slim derived data/zillow_zip.geojson;
 # regenerate it with build_zillow_zip.py from these source CSVs.
 data/Zip_*.csv
+
+# Local / transient — not part of the deployed site
+.claude/
+cache/

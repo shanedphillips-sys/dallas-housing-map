@@ -1,0 +1,576 @@
+{
+  "metric": "vacant + surface parking acres within half-mile (geometric union, deduped)",
+  "vacant_source": "DCAD/CCAD/Denton parcels coded vacant",
+  "parking_source": "OSM amenity=parking, surface only",
+  "half_mile_area_ac": 501.8,
+  "n_stations": 63,
+  "ranking": [
+    {
+      "rank": 1,
+      "station": "LAWNVIEW STATION",
+      "vacant_ac": 270.9,
+      "parking_ac": 4.2,
+      "combined_ac": 274.6,
+      "pct_of_area": 54.7,
+      "parking_net_ac": 3.7
+    },
+    {
+      "rank": 2,
+      "station": "UNT DALLAS STATION",
+      "vacant_ac": 250.2,
+      "parking_ac": 10.9,
+      "combined_ac": 257.1,
+      "pct_of_area": 51.2,
+      "parking_net_ac": 6.9
+    },
+    {
+      "rank": 3,
+      "station": "8TH & CORINTH STATION",
+      "vacant_ac": 220.0,
+      "parking_ac": 2.5,
+      "combined_ac": 221.7,
+      "pct_of_area": 44.2,
+      "parking_net_ac": 1.7
+    },
+    {
+      "rank": 4,
+      "station": "GREENBRIAR STREETCAR STATION",
+      "vacant_ac": 216.8,
+      "parking_ac": 5.9,
+      "combined_ac": 220.8,
+      "pct_of_area": 44.0,
+      "parking_net_ac": 4.0
+    },
+    {
+      "rank": 5,
+      "station": "CAMP WISDOM STATION",
+      "vacant_ac": 196.5,
+      "parking_ac": 2.9,
+      "combined_ac": 199.1,
+      "pct_of_area": 39.7,
+      "parking_net_ac": 2.6
+    },
+    {
+      "rank": 6,
+      "station": "LEDBETTER STATION",
+      "vacant_ac": 164.9,
+      "parking_ac": 4.0,
+      "combined_ac": 168.3,
+      "pct_of_area": 33.5,
+      "parking_net_ac": 3.4
+    },
+    {
+      "rank": 7,
+      "station": "CEDARS STATION",
+      "vacant_ac": 136.0,
+      "parking_ac": 33.2,
+      "combined_ac": 148.0,
+      "pct_of_area": 29.5,
+      "parking_net_ac": 12.0
+    },
+    {
+      "rank": 8,
+      "station": "OAKENWALD STREETCAR STATION",
+      "vacant_ac": 138.8,
+      "parking_ac": 10.3,
+      "combined_ac": 146.0,
+      "pct_of_area": 29.1,
+      "parking_net_ac": 7.2
+    },
+    {
+      "rank": 9,
+      "station": "EBJ UNION STATION",
+      "vacant_ac": 115.0,
+      "parking_ac": 63.1,
+      "combined_ac": 136.5,
+      "pct_of_area": 27.2,
+      "parking_net_ac": 21.5
+    },
+    {
+      "rank": 10,
+      "station": "CONVENTION CENTER STATION",
+      "vacant_ac": 116.3,
+      "parking_ac": 59.3,
+      "combined_ac": 130.2,
+      "pct_of_area": 25.9,
+      "parking_net_ac": 13.9
+    },
+    {
+      "rank": 11,
+      "station": "UNION STREETCAR STATION",
+      "vacant_ac": 98.5,
+      "parking_ac": 64.1,
+      "combined_ac": 119.8,
+      "pct_of_area": 23.9,
+      "parking_net_ac": 21.3
+    },
+    {
+      "rank": 12,
+      "station": "WEST END STATION",
+      "vacant_ac": 91.2,
+      "parking_ac": 65.3,
+      "combined_ac": 113.9,
+      "pct_of_area": 22.7,
+      "parking_net_ac": 22.7
+    },
+    {
+      "rank": 13,
+      "station": "MLK STATION",
+      "vacant_ac": 77.8,
+      "parking_ac": 31.9,
+      "combined_ac": 109.6,
+      "pct_of_area": 21.8,
+      "parking_net_ac": 31.8
+    },
+    {
+      "rank": 14,
+      "station": "AKARD STATION",
+      "vacant_ac": 93.1,
+      "parking_ac": 59.3,
+      "combined_ac": 108.8,
+      "pct_of_area": 21.7,
+      "parking_net_ac": 15.7
+    },
+    {
+      "rank": 15,
+      "station": "MARKET CENTER STATION",
+      "vacant_ac": 70.8,
+      "parking_ac": 44.3,
+      "combined_ac": 107.2,
+      "pct_of_area": 21.4,
+      "parking_net_ac": 36.4
+    },
+    {
+      "rank": 16,
+      "station": "FAIR PARK STATION",
+      "vacant_ac": 79.1,
+      "parking_ac": 31.9,
+      "combined_ac": 105.1,
+      "pct_of_area": 20.9,
+      "parking_net_ac": 26.0
+    },
+    {
+      "rank": 17,
+      "station": "ST PAUL STATION",
+      "vacant_ac": 86.0,
+      "parking_ac": 55.1,
+      "combined_ac": 98.1,
+      "pct_of_area": 19.6,
+      "parking_net_ac": 12.1
+    },
+    {
+      "rank": 18,
+      "station": "HATCHER STATION",
+      "vacant_ac": 93.7,
+      "parking_ac": 4.8,
+      "combined_ac": 97.9,
+      "pct_of_area": 19.5,
+      "parking_net_ac": 4.2
+    },
+    {
+      "rank": 19,
+      "station": "MORRELL STATION",
+      "vacant_ac": 96.8,
+      "parking_ac": 0.5,
+      "combined_ac": 97.2,
+      "pct_of_area": 19.4,
+      "parking_net_ac": 0.4
+    },
+    {
+      "rank": 20,
+      "station": "ST PAUL @ ROSS - S - NS",
+      "vacant_ac": 83.6,
+      "parking_ac": 56.3,
+      "combined_ac": 95.6,
+      "pct_of_area": 19.0,
+      "parking_net_ac": 12.0
+    },
+    {
+      "rank": 21,
+      "station": "DEEP ELLUM STATION",
+      "vacant_ac": 73.1,
+      "parking_ac": 55.7,
+      "combined_ac": 94.0,
+      "pct_of_area": 18.7,
+      "parking_net_ac": 20.9
+    },
+    {
+      "rank": 22,
+      "station": "FEDERAL @ OLIVE - E - NS",
+      "vacant_ac": 76.9,
+      "parking_ac": 50.2,
+      "combined_ac": 90.8,
+      "pct_of_area": 18.1,
+      "parking_net_ac": 13.9
+    },
+    {
+      "rank": 23,
+      "station": "MEDICAL/MARKET CTR STATION",
+      "vacant_ac": 42.0,
+      "parking_ac": 56.8,
+      "combined_ac": 88.3,
+      "pct_of_area": 17.6,
+      "parking_net_ac": 46.3
+    },
+    {
+      "rank": 24,
+      "station": "PEARL/ARTS DISTRICT STATION",
+      "vacant_ac": 69.0,
+      "parking_ac": 46.8,
+      "combined_ac": 86.9,
+      "pct_of_area": 17.3,
+      "parking_net_ac": 17.9
+    },
+    {
+      "rank": 25,
+      "station": "BAYLOR STATION",
+      "vacant_ac": 52.7,
+      "parking_ac": 58.2,
+      "combined_ac": 84.8,
+      "pct_of_area": 16.9,
+      "parking_net_ac": 32.1
+    },
+    {
+      "rank": 26,
+      "station": "CITYPLACE/UPTOWN WEST",
+      "vacant_ac": 59.6,
+      "parking_ac": 28.1,
+      "combined_ac": 83.5,
+      "pct_of_area": 16.6,
+      "parking_net_ac": 23.9
+    },
+    {
+      "rank": 27,
+      "station": "WALNUT HILL STATION",
+      "vacant_ac": 40.0,
+      "parking_ac": 47.3,
+      "combined_ac": 83.4,
+      "pct_of_area": 16.6,
+      "parking_net_ac": 43.4
+    },
+    {
+      "rank": 28,
+      "station": "CITYPLACE/UPTOWN STATION",
+      "vacant_ac": 59.0,
+      "parking_ac": 27.7,
+      "combined_ac": 82.6,
+      "pct_of_area": 16.5,
+      "parking_net_ac": 23.6
+    },
+    {
+      "rank": 29,
+      "station": "COLE @ BOWEN - S - NS",
+      "vacant_ac": 63.8,
+      "parking_ac": 24.8,
+      "combined_ac": 82.5,
+      "pct_of_area": 16.4,
+      "parking_net_ac": 18.7
+    },
+    {
+      "rank": 30,
+      "station": "CYPRESS WATERS STATION",
+      "vacant_ac": 78.9,
+      "parking_ac": 3.1,
+      "combined_ac": 82.0,
+      "pct_of_area": 16.3,
+      "parking_net_ac": 3.1
+    },
+    {
+      "rank": 31,
+      "station": "MCKINNEY @ ALLEN - N - NS",
+      "vacant_ac": 63.6,
+      "parking_ac": 25.0,
+      "combined_ac": 81.5,
+      "pct_of_area": 16.2,
+      "parking_net_ac": 17.9
+    },
+    {
+      "rank": 32,
+      "station": "VA MEDICAL CENTER STATION",
+      "vacant_ac": 65.6,
+      "parking_ac": 23.9,
+      "combined_ac": 80.5,
+      "pct_of_area": 16.0,
+      "parking_net_ac": 14.9
+    },
+    {
+      "rank": 33,
+      "station": "FOREST LN STATION",
+      "vacant_ac": 55.5,
+      "parking_ac": 22.9,
+      "combined_ac": 78.2,
+      "pct_of_area": 15.6,
+      "parking_net_ac": 22.7
+    },
+    {
+      "rank": 34,
+      "station": "MCKINNEY @ HALL - N - NS",
+      "vacant_ac": 58.7,
+      "parking_ac": 23.2,
+      "combined_ac": 77.1,
+      "pct_of_area": 15.4,
+      "parking_net_ac": 18.4
+    },
+    {
+      "rank": 35,
+      "station": "ZOO STATION",
+      "vacant_ac": 69.7,
+      "parking_ac": 15.0,
+      "combined_ac": 75.8,
+      "pct_of_area": 15.1,
+      "parking_net_ac": 6.1
+    },
+    {
+      "rank": 36,
+      "station": "SOUTHWEST MEDICAL DISTRICT/PARKLAND",
+      "vacant_ac": 53.1,
+      "parking_ac": 25.4,
+      "combined_ac": 73.1,
+      "pct_of_area": 14.6,
+      "parking_net_ac": 20.0
+    },
+    {
+      "rank": 37,
+      "station": "BISHOP ARTS STATION",
+      "vacant_ac": 65.1,
+      "parking_ac": 14.0,
+      "combined_ac": 73.0,
+      "pct_of_area": 14.5,
+      "parking_net_ac": 7.9
+    },
+    {
+      "rank": 38,
+      "station": "INWOOD/LOVE FIELD STATION",
+      "vacant_ac": 64.2,
+      "parking_ac": 9.0,
+      "combined_ac": 70.5,
+      "pct_of_area": 14.1,
+      "parking_net_ac": 6.3
+    },
+    {
+      "rank": 39,
+      "station": "VICTORY STATION",
+      "vacant_ac": 50.3,
+      "parking_ac": 28.9,
+      "combined_ac": 68.4,
+      "pct_of_area": 13.6,
+      "parking_net_ac": 18.1
+    },
+    {
+      "rank": 40,
+      "station": "BECKLEY STREETCAR STATION",
+      "vacant_ac": 58.8,
+      "parking_ac": 11.4,
+      "combined_ac": 66.5,
+      "pct_of_area": 13.3,
+      "parking_net_ac": 7.7
+    },
+    {
+      "rank": 41,
+      "station": "LBJ / CENTRAL STATION",
+      "vacant_ac": 47.4,
+      "parking_ac": 22.7,
+      "combined_ac": 65.5,
+      "pct_of_area": 13.0,
+      "parking_net_ac": 18.1
+    },
+    {
+      "rank": 42,
+      "station": "LAKE JUNE STATION",
+      "vacant_ac": 60.3,
+      "parking_ac": 3.9,
+      "combined_ac": 64.1,
+      "pct_of_area": 12.8,
+      "parking_net_ac": 3.8
+    },
+    {
+      "rank": 43,
+      "station": "BUCKNER STATION",
+      "vacant_ac": 62.3,
+      "parking_ac": 1.1,
+      "combined_ac": 63.4,
+      "pct_of_area": 12.6,
+      "parking_net_ac": 1.1
+    },
+    {
+      "rank": 44,
+      "station": "PARK LANE STATION",
+      "vacant_ac": 21.6,
+      "parking_ac": 46.2,
+      "combined_ac": 61.8,
+      "pct_of_area": 12.3,
+      "parking_net_ac": 40.2
+    },
+    {
+      "rank": 45,
+      "station": "KNOLL TRAIL STATION",
+      "vacant_ac": 22.7,
+      "parking_ac": 38.4,
+      "combined_ac": 60.9,
+      "pct_of_area": 12.1,
+      "parking_net_ac": 38.2
+    },
+    {
+      "rank": 46,
+      "station": "BACHMAN STATION",
+      "vacant_ac": 47.7,
+      "parking_ac": 7.2,
+      "combined_ac": 53.3,
+      "pct_of_area": 10.6,
+      "parking_net_ac": 5.6
+    },
+    {
+      "rank": 47,
+      "station": "6TH STREETCAR STATION",
+      "vacant_ac": 47.9,
+      "parking_ac": 10.1,
+      "combined_ac": 53.0,
+      "pct_of_area": 10.6,
+      "parking_net_ac": 5.1
+    },
+    {
+      "rank": 48,
+      "station": "ILLINOIS TC/STATION",
+      "vacant_ac": 43.6,
+      "parking_ac": 6.6,
+      "combined_ac": 48.6,
+      "pct_of_area": 9.7,
+      "parking_net_ac": 5.0
+    },
+    {
+      "rank": 49,
+      "station": "MCKINNEY @ MAPLE-ROUTH - N - NS",
+      "vacant_ac": 31.9,
+      "parking_ac": 27.4,
+      "combined_ac": 48.3,
+      "pct_of_area": 9.6,
+      "parking_net_ac": 16.4
+    },
+    {
+      "rank": 50,
+      "station": "KIEST STATION",
+      "vacant_ac": 20.4,
+      "parking_ac": 28.7,
+      "combined_ac": 48.2,
+      "pct_of_area": 9.6,
+      "parking_net_ac": 27.8
+    },
+    {
+      "rank": 51,
+      "station": "MCKINNEY @ PEARL - S - NS",
+      "vacant_ac": 31.3,
+      "parking_ac": 27.5,
+      "combined_ac": 47.8,
+      "pct_of_area": 9.5,
+      "parking_net_ac": 16.5
+    },
+    {
+      "rank": 52,
+      "station": "LBJ / SKILLMAN STATION",
+      "vacant_ac": 47.5,
+      "parking_ac": 5.3,
+      "combined_ac": 47.5,
+      "pct_of_area": 9.5,
+      "parking_net_ac": 0.0
+    },
+    {
+      "rank": 53,
+      "station": "SMU/MOCKINGBIRD STATION",
+      "vacant_ac": 27.7,
+      "parking_ac": 18.9,
+      "combined_ac": 43.8,
+      "pct_of_area": 8.7,
+      "parking_net_ac": 16.1
+    },
+    {
+      "rank": 54,
+      "station": "WALNUT HILL/DENTON STATION",
+      "vacant_ac": 32.8,
+      "parking_ac": 11.2,
+      "combined_ac": 37.5,
+      "pct_of_area": 7.5,
+      "parking_net_ac": 4.7
+    },
+    {
+      "rank": 55,
+      "station": "SHERMAN POCKET TRACK",
+      "vacant_ac": 22.9,
+      "parking_ac": 10.3,
+      "combined_ac": 32.8,
+      "pct_of_area": 6.5,
+      "parking_net_ac": 9.9
+    },
+    {
+      "rank": 56,
+      "station": "LOVERS LANE STATION",
+      "vacant_ac": 13.0,
+      "parking_ac": 20.7,
+      "combined_ac": 31.4,
+      "pct_of_area": 6.3,
+      "parking_net_ac": 18.4
+    },
+    {
+      "rank": 57,
+      "station": "LAKE HIGHLANDS STATION",
+      "vacant_ac": 28.5,
+      "parking_ac": 2.0,
+      "combined_ac": 30.5,
+      "pct_of_area": 6.1,
+      "parking_net_ac": 2.0
+    },
+    {
+      "rank": 58,
+      "station": "TYLER VERNON STATION",
+      "vacant_ac": 26.7,
+      "parking_ac": 2.5,
+      "combined_ac": 28.7,
+      "pct_of_area": 5.7,
+      "parking_net_ac": 2.0
+    },
+    {
+      "rank": 59,
+      "station": "WESTMORELAND STATION",
+      "vacant_ac": 19.4,
+      "parking_ac": 5.0,
+      "combined_ac": 24.4,
+      "pct_of_area": 4.9,
+      "parking_net_ac": 5.0
+    },
+    {
+      "rank": 60,
+      "station": "BURBANK STATION",
+      "vacant_ac": 15.1,
+      "parking_ac": 10.2,
+      "combined_ac": 23.4,
+      "pct_of_area": 4.7,
+      "parking_net_ac": 8.3
+    },
+    {
+      "rank": 61,
+      "station": "ROYAL LANE STATION",
+      "vacant_ac": 17.5,
+      "parking_ac": 4.9,
+      "combined_ac": 20.6,
+      "pct_of_area": 4.1,
+      "parking_net_ac": 3.1
+    },
+    {
+      "rank": 62,
+      "station": "HAMPTON STATION",
+      "vacant_ac": 14.1,
+      "parking_ac": 4.2,
+      "combined_ac": 17.8,
+      "pct_of_area": 3.5,
+      "parking_net_ac": 3.7
+    },
+    {
+      "rank": 63,
+      "station": "WHITE ROCK STATION",
+      "vacant_ac": 2.3,
+      "parking_ac": 7.0,
+      "combined_ac": 9.2,
+      "pct_of_area": 1.8,
+      "parking_net_ac": 6.9
+    }
+  ]
+}

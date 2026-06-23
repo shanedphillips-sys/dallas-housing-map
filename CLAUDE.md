@@ -65,6 +65,8 @@ A MapLibre GL JS map of the Dallas region with toggleable, draggable-to-reorder 
 - **Pop change 2010–2020:** Single grouped toggle with Block-group / Tract radio
 - **Housing-unit change 2010–2020:** Same grouped pattern
 - **Job density (workplace) 2022:** LODES WAC, by tract, heatmap fill
+- **Street pattern (per tract):** OSM street-network connectivity — grouped toggle with a
+  Dendricity / Dead-end share / Intersection density radio. Grid vs. cul-de-sac suburbia.
 - **Median rent change:** Grouped toggle. ACS-tract (2012–2024) ↔ Zillow-ZIP/ZORI (2015–2025)
   source radio, $-change / %-change radio, dual-thumb year slider. All values are real
   (CPI-deflated) constant 2024$, so % change is real growth.
@@ -93,6 +95,8 @@ Districts (per district), and Value by Land Use (multi-select land uses + metric
 ├── patch_institutional.py           # Reclassifies totexempt=='X' parcels as Institutional
 ├── build_pop_hu_geojsons.py         # 7-county BG- and tract-level pop/HU change
 ├── build_jobs_tracts.py             # LODES8 WAC 2022 -> tract-level jobs GeoJSON
+├── build_street_dendricity.py       # OSM (OSMnx) -> per-tract dendricity/dead-end/intx density
+├── build_street_lines.py            # cached OSM graphs -> classified street lines (grid vs stub)
 ├── build_cpi.py                     # BLS CPI-U annual averages -> data/cpi_annual.json
 ├── build_county_boundaries.py       # Dissolve tracts -> 7 clean county outlines
 ├── build_acs_rent_value.py          # ACS 5yr median rent/value 2012-2024 -> tract GeoJSON
@@ -109,6 +113,8 @@ Districts (per district), and Value by Land Use (multi-select land uses + metric
     ├── tracts.geojson                 # 7 counties, ~1,600 tracts
     ├── block_groups.geojson           # 7 counties, ~4,100 BGs
     ├── jobs_tracts.geojson            # LODES, 7 counties
+    ├── street_dendricity_tracts.geojson # OSM street-pattern metrics per tract (1.7 MB)
+    ├── streets_dallas.geojson         # OSM street lines (City of Dallas), classified grid vs cul-de-sac
     ├── counties.geojson               # 7 dissolved county outlines + names
     ├── acs_rent_value_tracts.geojson  # ACS median rent/value 2012-2024 (real 2024$), 1,599 tracts
     ├── zillow_zip.geojson             # Zillow ZHVI/ZORI annual 2010-2025 (real 2024$), 218 ZIPs
@@ -191,6 +197,28 @@ Source-only files (not in the repo, lived at the OneDrive project root):
   - `<$50k`: retail, food/accom, arts, other services, agriculture
   - `$50k–$100k`: construction, manufacturing, education, health, public admin, etc.
   - `>$100k`: mining/oil&gas, utilities, info, finance, professional, mgmt
+
+### Street pattern (dendricity / connectivity) — `build_street_dendricity.py`
+
+- Per-tract OSM street-network connectivity, to distinguish **grid** from **cul-de-sac /
+  dendritic suburbia**. Pulls the OSM `drive` network for each county via OSMnx (cached as
+  graphml under `../osm_cache`), composes all 7 into ONE graph (shared OSM node IDs stitch
+  county lines), classifies edges, then assigns each edge/node to a tract by location.
+- **Dendricity** (after Barrington-Leigh & Millard-Ball): length-weighted share of street
+  length that is a network **bridge** (removal disconnects the network — includes dead-ends)
+  vs. part of a **cycle**. Bridges are computed on the WHOLE composed graph (a global property),
+  not per-tract subgraphs (which would falsely read clipped through-streets as dead-ends).
+- **Finding: length-weighted dendricity is compressed for DFW** (median 0.06, p90 0.17) because
+  cul-de-sac stubs are *short*, so by length even pod suburbs read low. Ground-truth: downtown
+  Dallas = 0.00 (textbook grid), but the suburban middle is muddy. So the layer is a **grouped
+  toggle with a metric radio** — Dendricity / **Dead-end share** / Intersection density — all
+  shipped per tract. **Dead-end share** (% of nodes that are culs-de-sac; grids 0–4%, cul-de-sac
+  suburbs 17–22%) and **intersection density** (grids 140–273/mi², suburbs ~100) discriminate
+  far better; dead-end share is the recommended default view.
+- Palette: teal (grid / well-connected) → cream → red (cul-de-sac). Intersection density
+  REVERSES the ramp (high density = grid = teal). Bin edges tuned to the 7-county distribution.
+  Output `data/street_dendricity_tracts.geojson`: geoid, dendricity, pct_deadend,
+  intersection_density, n_intersections, street_mi.
 
 ### Rent & home-value change (ACS tract + Zillow ZIP)
 

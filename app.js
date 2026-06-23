@@ -140,6 +140,16 @@ const JOBS_BINS = {
 const JOBS_ZERO_COLOR = "#EEE9DF";
 const LOW_DENS_LABEL = "Low density (<1,000 / sq mi)";
 
+// Opportunity Insights — predicted adult earnings for kids who grew up in
+// 25th-percentile-income families (Opportunity Atlas). Sequential YlGn:
+// darker green = higher upward mobility. Bins tuned to the 7-county spread.
+const OI_BINS = {
+  edges:   [25000, 30000, 35000, 42000, 50000],
+  palette: ["#FFFFCC", "#D9F0A3", "#ADDD8E", "#78C679", "#31A354", "#006837"],
+  labels:  ["< $25k", "$25k–$30k", "$30k–$35k", "$35k–$42k", "$42k–$50k", "≥ $50k"],
+};
+const OI_NODATA = "#D9D2C5";
+
 // Zoning palette — colors mirror the land-use map where possible:
 //   Single-Family     → land-use SF yellow-tan
 //   Townhouse/Cluster → land-use Townhouse orange
@@ -159,6 +169,147 @@ const ZONING_COLORS = {
   "Planned Development":   "#888888",
   "Other":                 "#C4BDB3",
 };
+
+// ---- Base-zoning display modes ----------------------------------------------
+// One fill+outline layer pair, three modes selected by radios under "Base zoning":
+//   category (default) — color by the 10 zone categories (ZONING_COLORS)
+//   sf                 — show ONLY single-family R-districts, ramped by lot size
+//   all                — color every unique zone_dist (~60) distinctly
+// Switching a mode just swaps the fill-color expression, the layer filter, and the
+// legend (mirrors the Street-pattern metric pattern; see initStreetPattern).
+const zoningState = { mode: "category", allBuilt: false, allOrder: [], allColors: {}, allCatOf: {} };
+
+// Single-family districts, densest (smallest min-lot) -> largest; darkest = R-5.
+// Matched on zone_dist exactly as stored in data/zoning.geojson.
+const ZONING_SF_RAMP = [
+  ["R-5(A)",     "#08306B", "R-5 · 5,000 sf min lot (densest)"],
+  ["R-7.5(A)",   "#08519C", "R-7.5 · 7,500 sf"],
+  ["R-10(A)",    "#2171B5", "R-10 · 10,000 sf"],
+  ["R-13(A)",    "#4292C6", "R-13 · 13,000 sf"],
+  ["R-16(A)",    "#6BAED6", "R-16 · 16,000 sf"],
+  ["R-1/2ac(A)", "#9ECAE1", "R-½ acre · ~21,780 sf"],
+  ["R-1ac(A)",   "#C6DBEF", "R-1 acre · ~43,560 sf (largest)"],
+];
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const c = l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+// n maximally-distinct colors via the golden-angle hue step, cycling three
+// lightness/saturation bands so even adjacent districts read apart.
+function distinctColors(n) {
+  const L = [44, 60, 73], S = [72, 84, 62], out = [];
+  for (let i = 0; i < n; i++) out.push(hslToHex((i * 137.508) % 360, S[i % 3], L[i % 3]));
+  return out;
+}
+
+// Build the "every unique zone" palette once, from the loaded GeoJSON (browser-
+// cached after the layer's first fetch). Districts sorted by category then name so
+// the legend groups sensibly; colors assigned by golden-angle so neighbors differ.
+async function ensureZoningAll() {
+  if (zoningState.allBuilt) return;
+  const gj = await (await fetch("data/zoning.geojson")).json();
+  const catOf = {};
+  for (const ft of gj.features) {
+    const zd = ft.properties.zone_dist;
+    if (zd && !(zd in catOf)) catOf[zd] = ft.properties.category || "Other";
+  }
+  const catOrder = Object.keys(ZONING_COLORS);
+  const dists = Object.keys(catOf).sort((a, b) => {
+    const ca = catOrder.indexOf(catOf[a]), cb = catOrder.indexOf(catOf[b]);
+    return ca !== cb ? ca - cb : a.localeCompare(b, undefined, { numeric: true });
+  });
+  const cols = distinctColors(dists.length);
+  zoningState.allOrder = dists;
+  zoningState.allCatOf = catOf;
+  zoningState.allColors = Object.fromEntries(dists.map((d, i) => [d, cols[i]]));
+  zoningState.allBuilt = true;
+}
+
+function zoningFillColor() {
+  if (zoningState.mode === "sf") {
+    const e = ["match", ["get", "zone_dist"]];
+    ZONING_SF_RAMP.forEach(([zd, c]) => e.push(zd, c));
+    e.push("rgba(0,0,0,0)");                 // everything else: hidden
+    return e;
+  }
+  if (zoningState.mode === "all" && zoningState.allBuilt) {
+    const e = ["match", ["get", "zone_dist"]];
+    zoningState.allOrder.forEach((zd) => e.push(zd, zoningState.allColors[zd]));
+    e.push("#CCCCCC");
+    return e;
+  }
+  const e = ["match", ["get", "category"]];  // category (default)
+  Object.entries(ZONING_COLORS).forEach(([cat, c]) => e.push(cat, c));
+  e.push("#C4BDB3");
+  return e;
+}
+
+function zoningFilter() {
+  if (zoningState.mode === "sf")
+    return ["in", ["get", "zone_dist"], ["literal", ZONING_SF_RAMP.map((r) => r[0])]];
+  return null;                               // category / all: show every feature
+}
+
+function buildZoningLegend() {
+  if (zoningState.mode === "sf") {
+    const rows = ZONING_SF_RAMP.map(([, c, lab]) =>
+      `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${lab}</div>`).join("");
+    return `<div class="legend-block"><h3>Single-Family Zoning</h3>
+      <div class="muted" style="margin:-2px 0 5px 0">By minimum lot size · darkest = densest</div>${rows}</div>`;
+  }
+  if (zoningState.mode === "all" && zoningState.allBuilt) {
+    const catOrder = Object.keys(ZONING_COLORS), shown = new Set();
+    let body = "";
+    const block = (head, items) => {
+      if (!items.length) return "";
+      items.forEach((zd) => shown.add(zd));
+      return `<div class="muted" style="margin:5px 0 1px;font-weight:600">${head}</div>` +
+        items.map((zd) =>
+          `<div class="swatch-row"><span class="swatch" style="background:${zoningState.allColors[zd]}"></span>${zd}</div>`).join("");
+    };
+    for (const cat of catOrder)
+      body += block(cat, zoningState.allOrder.filter((zd) => zoningState.allCatOf[zd] === cat));
+    body += block("Other districts", zoningState.allOrder.filter((zd) => !shown.has(zd)));
+    return `<div class="legend-block"><h3>Every Zoning District (${zoningState.allOrder.length})</h3>
+      <div style="max-height:320px;overflow:auto;padding-right:2px">${body}</div></div>`;
+  }
+  const rows = Object.entries(ZONING_COLORS).map(([cat, c]) =>
+    `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${cat}</div>`).join("");
+  return `<div class="legend-block"><h3>Base Zoning</h3>${rows}</div>`;
+}
+
+// Apply the current zoning mode to the live layer (paint + filter) and the legend.
+async function applyZoningMode() {
+  if (zoningState.mode === "all") await ensureZoningAll();
+  if (LAYERS.zoning && LAYERS.zoning.enabled && map.getLayer("zoning-fill")) {
+    map.setPaintProperty("zoning-fill", "fill-color", zoningFillColor());
+    const f = zoningFilter();
+    map.setFilter("zoning-fill", f);
+    map.setFilter("zoning-outline", f);
+  }
+  refreshLegend();
+}
+
+function initZoningMode() {
+  const radios = document.querySelectorAll('input[name="zoning_mode"]');
+  if (!radios.length) return;
+  radios.forEach((rb) => {
+    rb.addEventListener("change", async () => {
+      if (!rb.checked) return;
+      zoningState.mode = rb.value;
+      const wrap = document.querySelector('input[data-layer="zoning"]').parentElement;
+      wrap.classList.add("loading");
+      try { await applyZoningMode(); } finally { wrap.classList.remove("loading"); }
+    });
+  });
+}
 
 // Land use definitions (data-driven). The `dataValue` is what the GeoJSON
 // stores in the `land_use_cat` property; `label` is what we show in UI.
@@ -224,6 +375,22 @@ const DECADE_BINS = [
   { label: "2010 or later",  color: "#ffdd00" },
 ];
 
+// Improvement / land value ratio bins (DCAD as-reported impr_val / land_val).
+// Same cool-to-warm palette as the FAR / Decade-built layers; index 0 (gray) is
+// the no-land-value sentinel (ratio undefined).
+const ILR_BINS = [
+  { label: "No land value", color: "#B8B0A0" },
+  { label: "< 0.25",        color: "#22ecf0" },
+  { label: "0.25 - 0.49",   color: "#14b1fd" },
+  { label: "0.5 - 0.99",    color: "#2c7fdb" },
+  { label: "1.0 - 1.49",    color: "#6539b3" },
+  { label: "1.5 - 1.99",    color: "#a032b2" },
+  { label: "2.0 - 2.99",    color: "#d124a9" },
+  { label: "3.0 - 3.99",    color: "#fd4dab" },
+  { label: "4.0 - 4.99",    color: "#ff7911" },
+  { label: "≥ 5.0",         color: "#ffdd00" },
+];
+
 // Value-per-acre bins (used for 3D fill-extrusion layers). Color thresholds
 // chosen to match the ordinal feel of the FAR palette. Extrusion height is
 // linear: 1 metre per $100,000 of value per acre.
@@ -234,11 +401,20 @@ const LOW_VALUE_THRESHOLD = 100_000;
 const TRANSPARENT_COLOR = "rgba(0,0,0,0)";
 
 const VALUE_PER_ACRE_BINS = [
-  { upper: 500_000,    label: "$100k – $500k", color: "#FED976" },  // pale yellow
-  { upper: 2_000_000,  label: "$500k – $2M",   color: "#FEA665" },  // soft orange
-  { upper: 10_000_000, label: "$2M – $10M",    color: "#ED5752" },  // softer red
-  { upper: 50_000_000, label: "$10M – $50M",   color: "#B5435A" },  // muted burgundy
-  { upper: Infinity,   label: "$50M+",         color: "#7E55B0" },  // muted purple
+  { upper: 1_000_000,  label: "$100k – $1M",  color: "#FEE49E" },  // lighter pale yellow
+  { upper: 2_000_000,  label: "$1M – $2M",    color: "#FEBE8C" },  // lighter soft orange
+  { upper: 5_000_000,  label: "$2M – $5M",    color: "#F0827E" },  // lighter red
+  { upper: 20_000_000, label: "$5M – $20M",   color: "#B5435A" },  // muted burgundy (dark red)
+  { upper: Infinity,   label: "$20M+",        color: "#7E55B0" },  // muted purple
+];
+// Land value per acre runs much lower than total/improvement value, so it uses its
+// own narrower bins (same 5-color palette).
+const LAND_VALUE_BINS = [
+  { upper: 500_000,   label: "$100k – $500k", color: "#FEE49E" },
+  { upper: 1_000_000, label: "$500k – $1M",   color: "#FEBE8C" },
+  { upper: 2_000_000, label: "$1M – $2M",     color: "#F0827E" },
+  { upper: 5_000_000, label: "$2M – $5M",     color: "#B5435A" },
+  { upper: Infinity,  label: "$5M+",          color: "#7E55B0" },
 ];
 // Linear extrusion: 1 m per $25k/acre, capped at the height that $300M/acre
 // would produce ($300M / $25k = 12,000 m).
@@ -249,17 +425,17 @@ const VALUE_HEIGHT_CAP_M     = VALUE_HEIGHT_CAP_VALUE / VALUE_HEIGHT_PER_M;   //
 // have a few sq ft of geometry and produce absurd per-acre numbers.
 const MIN_RENDER_AREA_SQFT = 100;
 
-function valuePerAcreColorExpr(propName) {
+function valuePerAcreColorExpr(propName, bins = VALUE_PER_ACRE_BINS) {
   // Anything below the low-value threshold (including value=0 "no data") is
   // returned transparent; positive values at/above threshold step through the
   // binned palette.
   const expr = [
     "step", ["coalesce", ["get", propName], 0],
     TRANSPARENT_COLOR,
-    LOW_VALUE_THRESHOLD, VALUE_PER_ACRE_BINS[0].color,
+    LOW_VALUE_THRESHOLD, bins[0].color,
   ];
-  for (let i = 0; i < VALUE_PER_ACRE_BINS.length - 1; i++) {
-    expr.push(VALUE_PER_ACRE_BINS[i].upper, VALUE_PER_ACRE_BINS[i + 1].color);
+  for (let i = 0; i < bins.length - 1; i++) {
+    expr.push(bins[i].upper, bins[i + 1].color);
   }
   return expr;
 }
@@ -298,7 +474,7 @@ function refreshValueHeightExprs() {
   }
 }
 
-function makeValuePerAcreLayer(layerKey, propName, label) {
+function makeValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACRE_BINS) {
   const fillLayerId    = `${layerKey}-3d`;
   const lowLayerId     = `${layerKey}-low`;
   return {
@@ -343,7 +519,7 @@ function makeValuePerAcreLayer(layerKey, propName, label) {
           [">=", ["coalesce", ["get", "area_feet"], 0], MIN_RENDER_AREA_SQFT],
         ],
         paint: {
-          "fill-extrusion-color": valuePerAcreColorExpr(propName),
+          "fill-extrusion-color": valuePerAcreColorExpr(propName, bins),
           "fill-extrusion-height": valuePerAcreHeightExpr(propName),
           "fill-extrusion-base": 0,
           "fill-extrusion-opacity": 1.0,
@@ -353,7 +529,7 @@ function makeValuePerAcreLayer(layerKey, propName, label) {
     popup: (props) => parcelPopup(props),
     clickLayer: [fillLayerId, lowLayerId],
     legend: () => {
-      const rows = VALUE_PER_ACRE_BINS.map((b) =>
+      const rows = bins.map((b) =>
         `<div class="swatch-row"><span class="swatch" style="background:${b.color}"></span>${b.label}</div>`).join("");
       const lowRow = `<div class="swatch-row"><span class="swatch" style="background:transparent;border:1px solid #888"></span>&lt; $100k / acre</div>`;
       return `<div class="legend-block">
@@ -362,6 +538,49 @@ function makeValuePerAcreLayer(layerKey, propName, label) {
         ${rows}
         <div class="muted" style="margin-top:4px">Height: 1 m per $25k/acre${valueCapEnabled ? ", capped at $100M/acre (4,000 m)" : " (uncapped)"}. Right-drag or shift-drag to tilt for 3D.</div>
       </div>`;
+    },
+  };
+}
+
+// 2D companion to makeValuePerAcreLayer: same value-per-acre data and binned
+// palette, but a flat choropleth fill (no extrusion / height / cap). Parcels
+// below $100k/acre (and tiny placeholder geometry) are not rendered.
+function make2DValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACRE_BINS) {
+  const fillId = `${layerKey}-2d`;
+  return {
+    label,
+    minzoom: 11,
+    sourceId: "parcels-src",
+    sourceFile: null,
+    layerIds: [fillId],
+    customLoad: async () => {
+      const data = await loadParcelsCombined();
+      if (!map.getSource("parcels-src")) {
+        map.addSource("parcels-src", { type: "geojson", data });
+      }
+    },
+    addLayers: () => {
+      map.addLayer({
+        id: fillId,
+        type: "fill",
+        source: "parcels-src",
+        minzoom: 11,
+        filter: ["all",
+          [">=", ["coalesce", ["get", propName], 0], LOW_VALUE_THRESHOLD],
+          [">=", ["coalesce", ["get", "area_feet"], 0], MIN_RENDER_AREA_SQFT]],
+        paint: {
+          "fill-color": valuePerAcreColorExpr(propName, bins),
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.6, 14, 0.85],
+        },
+      }, beneathTopLayers());
+    },
+    popup: (props) => parcelPopup(props),
+    clickLayer: fillId,
+    legend: () => {
+      const rows = bins.map((b) =>
+        `<div class="swatch-row"><span class="swatch" style="background:${b.color}"></span>${b.label}</div>`).join("");
+      const lowRow = `<div class="swatch-row"><span class="swatch" style="background:transparent;border:1px solid #888"></span>&lt; $100k / acre</div>`;
+      return `<div class="legend-block"><h3>${label}</h3>${lowRow}${rows}</div>`;
     },
   };
 }
@@ -418,14 +637,11 @@ async function loadParcelsCombined() {
     fetch(`data/parcels_${q}.geojson`).then((r) => r.json())
   );
   const parts = await Promise.all(fetches);
-  let total = 0;
-  const features = [];
-  for (const p of parts) {
-    features.push(...p.features);
-    total += p.features.length;
-  }
+  // flatMap (not features.push(...p.features)) — spreading 100k+ elements as
+  // call arguments overflows the stack.
+  const features = parts.flatMap((p) => p.features);
   parcelsCombined = { type: "FeatureCollection", features };
-  console.log(`Loaded ${total.toLocaleString()} parcels.`);
+  console.log(`Loaded ${features.length.toLocaleString()} parcels.`);
   return parcelsCombined;
 }
 
@@ -460,7 +676,7 @@ const LAYERS = {
            style="color:#4A90A4;font-weight:500">Show district report →</a>
       </div>
     `,
-    clickLayer: "council-fill",
+    clickLayer: null,   // councilmember popup disabled — that info lives in the Council District report
     legendGroup: "Jurisdiction boundaries",
     legendOrder: 3,
     legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-color:#2A2A2A"></span>City Council Districts</div>`,
@@ -492,17 +708,11 @@ const LAYERS = {
     sourceFile: "data/zoning.geojson",
     layerIds: ["zoning-fill", "zoning-outline"],
     addLayers: () => {
-      const colorExpr = ["match", ["get", "category"]];
-      Object.entries(ZONING_COLORS).forEach(([cat, color]) => {
-        colorExpr.push(cat, color);
-      });
-      colorExpr.push("#C4BDB3");
-
       map.addLayer({
         id: "zoning-fill",
         type: "fill",
         source: "zoning-src",
-        paint: { "fill-color": colorExpr, "fill-opacity": 0.65 },
+        paint: { "fill-color": zoningFillColor(), "fill-opacity": 0.65 },
       }, beneathTopLayers());
       map.addLayer({
         id: "zoning-outline",
@@ -510,6 +720,9 @@ const LAYERS = {
         source: "zoning-src",
         paint: { "line-color": "#FFFFFF", "line-width": 0.3, "line-opacity": 0.5 },
       }, beneathTopLayers());
+      const f = zoningFilter();              // honor the currently-selected mode
+      map.setFilter("zoning-fill", f);
+      map.setFilter("zoning-outline", f);
     },
     popup: (props) => `
       <div class="popup-title">Zoning: ${props.zone_dist ?? ""}</div>
@@ -519,16 +732,12 @@ const LAYERS = {
       ${props.cd_num ? `<div class="popup-row"><span class="label">CD #</span><span class="value">${props.cd_num}</span></div>` : ""}
     `,
     clickLayer: "zoning-fill",
-    legend: () => {
-      const rows = Object.entries(ZONING_COLORS)
-        .map(([cat, color]) =>
-          `<div class="swatch-row"><span class="swatch" style="background:${color}"></span>${cat}</div>`).join("");
-      return `<div class="legend-block"><h3>Base Zoning</h3>${rows}</div>`;
-    },
+    legend: () => buildZoningLegend(),
   },
 
   parcels: {
     label: "Parcels (neutral)",
+    minzoom: 12,
     sourceId: "parcels-src",
     sourceFile: null, // loaded separately via loadParcelsCombined()
     layerIds: ["parcels-fill", "parcels-outline"],
@@ -577,6 +786,7 @@ const LAYERS = {
 
   land_use: {
     label: "Land use",
+    minzoom: 11,
     sourceId: "parcels-src",
     sourceFile: null,
     layerIds: ["land-use-fill", "land-use-vacant-pattern", "land-use-outline"],
@@ -656,11 +866,12 @@ const LAYERS = {
     },
   },
 
-  far: {
-    label: "Building FAR",
+  far_footprint: {
+    label: "Building floor-area ratio (FAR)",
+    minzoom: 11,
     sourceId: "parcels-src",
     sourceFile: null,
-    layerIds: ["far-fill", "far-outline"],
+    layerIds: ["far-foot-fill", "far-foot-outline"],
     customLoad: async () => {
       const data = await loadParcelsCombined();
       if (!map.getSource("parcels-src")) {
@@ -668,25 +879,27 @@ const LAYERS = {
       }
     },
     addLayers: () => {
-      const colorExpr = ["match", ["get", "far_cat"]];
-      FAR_BINS.forEach((bin) => colorExpr.push(bin, FAR_COLORS[bin]));
-      colorExpr.push("#888888");
-
+      // Numeric step on foot_far, reusing the FAR palette. Each parcel's CAD floor
+      // area is redistributed across the building footprints overlapping it, so a
+      // building that spans several lots lights up every lot it sits on.
+      const EDGE = { "< 0.25": 0.0001, "0.25 - 0.49": 0.25, "0.5 - 0.99": 0.5,
+        "1.0 - 1.49": 1.0, "1.5 - 2.0": 1.5, "2.0 - 2.9": 2.0, "3.0 - 4.9": 3.0,
+        "5.0 - 9.9": 5.0, "10+": 10.0 };
+      const expr = ["step", ["coalesce", ["get", "foot_far"], 0], FAR_COLORS["No Building"]];
+      ["< 0.25", "0.25 - 0.49", "0.5 - 0.99", "1.0 - 1.49", "1.5 - 2.0",
+       "2.0 - 2.9", "3.0 - 4.9", "5.0 - 9.9", "10+"].forEach((b) => expr.push(EDGE[b], FAR_COLORS[b]));
       map.addLayer({
-        id: "far-fill",
+        id: "far-foot-fill",
         type: "fill",
         source: "parcels-src",
         minzoom: 11,
         paint: {
-          "fill-color": colorExpr,
-          "fill-opacity": [
-            "interpolate", ["linear"], ["zoom"],
-            11, 0.6, 14, 0.85,
-          ],
+          "fill-color": expr,
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.6, 14, 0.85],
         },
       }, beneathTopLayers());
       map.addLayer({
-        id: "far-outline",
+        id: "far-foot-outline",
         type: "line",
         source: "parcels-src",
         minzoom: 14,
@@ -694,16 +907,18 @@ const LAYERS = {
       }, beneathTopLayers());
     },
     popup: (props) => parcelPopup(props),
-    clickLayer: "far-fill",
+    clickLayer: "far-foot-fill",
     legend: () => {
       const rows = FAR_BINS.map((bin) =>
         `<div class="swatch-row"><span class="swatch" style="background:${FAR_COLORS[bin]}"></span>FAR ${bin}</div>`).join("");
-      return `<div class="legend-block"><h3>Building FAR</h3>${rows}</div>`;
+      return `<div class="legend-block"><h3>Building floor-area ratio (FAR)</h3>${rows}` +
+        `<div class="muted" style="margin-top:4px">CAD floor area split across the building footprints overlapping each lot.</div></div>`;
     },
   },
 
   decade_built: {
-    label: "Decade built",
+    label: "Decade structure built",
+    minzoom: 11,
     sourceId: "parcels-src",
     sourceFile: null,
     layerIds: ["decade-built-fill", "decade-built-outline"],
@@ -759,7 +974,69 @@ const LAYERS = {
     legend: () => {
       const rows = DECADE_BINS.map((d) =>
         `<div class="swatch-row"><span class="swatch" style="background:${d.color}"></span>${d.label}</div>`).join("");
-      return `<div class="legend-block"><h3>Decade Built</h3>${rows}</div>`;
+      return `<div class="legend-block"><h3>Decade structure built</h3>${rows}</div>`;
+    },
+  },
+
+  imp_land_ratio: {
+    label: "Improvement / land value ratio",
+    minzoom: 11,
+    sourceId: "parcels-src",
+    sourceFile: null,
+    layerIds: ["imp-land-ratio-fill", "imp-land-ratio-outline"],
+    customLoad: async () => {
+      const data = await loadParcelsCombined();
+      if (!map.getSource("parcels-src")) {
+        map.addSource("parcels-src", { type: "geojson", data });
+      }
+    },
+    addLayers: () => {
+      // ratio = DCAD improvement value / land value (as reported).
+      // land_val <= 0 -> -1 sentinel (no land value); missing impr -> 0.
+      const ratio = ["case", [">", ["get", "land_val"], 0],
+        ["/", ["coalesce", ["get", "impr_val"], 0], ["get", "land_val"]], -1];
+      const colorExpr = ["step", ratio,
+        ILR_BINS[0].color,          // ratio < 0  (sentinel: no land value)
+        0,    ILR_BINS[1].color,    // 0    – 0.25
+        0.25, ILR_BINS[2].color,    // 0.25 – 0.5
+        0.5,  ILR_BINS[3].color,    // 0.5  – 1.0
+        1.0,  ILR_BINS[4].color,    // 1.0  – 1.5
+        1.5,  ILR_BINS[5].color,    // 1.5  – 2.0
+        2.0,  ILR_BINS[6].color,    // 2.0  – 3.0
+        3.0,  ILR_BINS[7].color,    // 3.0  – 4.0
+        4.0,  ILR_BINS[8].color,    // 4.0  – 5.0
+        5.0,  ILR_BINS[9].color];   // >= 5.0
+      // Hide parcels under $100k/acre total value (like the 3D value layer) and
+      // Institutional / Government parcels (their assessed split is unreliable).
+      const valFilter = ["all",
+        [">=", ["coalesce", ["get", "value_per_acre"], 0], 100000],
+        ["!=", ["coalesce", ["get", "land_use_cat"], ""], "Institutional"]];
+      map.addLayer({
+        id: "imp-land-ratio-fill",
+        type: "fill",
+        source: "parcels-src",
+        minzoom: 11,
+        filter: valFilter,
+        paint: {
+          "fill-color": colorExpr,
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.6, 14, 0.85],
+        },
+      }, beneathTopLayers());
+      map.addLayer({
+        id: "imp-land-ratio-outline",
+        type: "line",
+        source: "parcels-src",
+        minzoom: 14,
+        filter: valFilter,
+        paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
+      }, beneathTopLayers());
+    },
+    popup: (props) => parcelPopup(props),
+    clickLayer: "imp-land-ratio-fill",
+    legend: () => {
+      const rows = ILR_BINS.map((d) =>
+        `<div class="swatch-row"><span class="swatch" style="background:${d.color}"></span>${d.label}</div>`).join("");
+      return `<div class="legend-block"><h3>Improvement / land value ratio</h3>${rows}</div>`;
     },
   },
 
@@ -768,7 +1045,11 @@ const LAYERS = {
   // value-per-acre property and color binned by value.
   value_per_acre: makeValuePerAcreLayer("value-per-acre", "value_per_acre", "Total value per acre"),
   impr_per_acre:  makeValuePerAcreLayer("impr-per-acre",  "impr_per_acre",  "Improvement value per acre"),
-  land_per_acre:  makeValuePerAcreLayer("land-per-acre",  "land_per_acre",  "Taxable land value per acre"),
+  land_per_acre:  makeValuePerAcreLayer("land-per-acre",  "land_per_acre",  "Taxable land value per acre", LAND_VALUE_BINS),
+  // 2D flat-fill companions (same data + palette, no extrusion)
+  value_per_acre_2d: make2DValuePerAcreLayer("value-per-acre", "value_per_acre", "Total value per acre"),
+  impr_per_acre_2d:  make2DValuePerAcreLayer("impr-per-acre",  "impr_per_acre",  "Improvement value per acre"),
+  land_per_acre_2d:  make2DValuePerAcreLayer("land-per-acre",  "land_per_acre",  "Taxable land value per acre", LAND_VALUE_BINS),
 
   rail_stops: {
     label: "Rail stations",
@@ -948,7 +1229,7 @@ const LAYERS = {
   },
 
   jobs_density: {
-    label: "Job density (workplace) 2022",
+    label: "Job density",
     sourceId: "jobs-src",
     sourceFile: "data/jobs_tracts.geojson",
     layerIds: ["jobs-fill", "jobs-outline"],
@@ -981,6 +1262,43 @@ const LAYERS = {
     popup: (props) => jobsPopup(props),
     clickLayer: "jobs-fill",
     legend: () => buildJobsLegend(),
+  },
+
+  oi_earnings: {
+    label: "Expected adult earnings",
+    sourceId: "oi-src",
+    sourceFile: "data/oi_tracts.geojson",
+    layerIds: ["oi-fill", "oi-outline"],
+    addLayers: () => {
+      const v = ["coalesce", ["get", "oi"], -1];
+      const colorExpr = [
+        "case",
+        ["<", v, 0], OI_NODATA,
+        ["step", v,
+          OI_BINS.palette[0],
+          OI_BINS.edges[0], OI_BINS.palette[1],
+          OI_BINS.edges[1], OI_BINS.palette[2],
+          OI_BINS.edges[2], OI_BINS.palette[3],
+          OI_BINS.edges[3], OI_BINS.palette[4],
+          OI_BINS.edges[4], OI_BINS.palette[5],
+        ],
+      ];
+      map.addLayer({
+        id: "oi-fill",
+        type: "fill",
+        source: "oi-src",
+        paint: { "fill-color": colorExpr, "fill-opacity": 0.75 },
+      }, beneathTopLayers());
+      map.addLayer({
+        id: "oi-outline",
+        type: "line",
+        source: "oi-src",
+        paint: { "line-color": "#FFFFFF", "line-width": 0.4 },
+      }, beneathTopLayers());
+    },
+    popup: (props) => oiPopup(props),
+    clickLayer: "oi-fill",
+    legend: () => buildOiLegend(),
   },
 };
 
@@ -1046,11 +1364,13 @@ function parcelPopup(props) {
     props.area_feet ? `<div class="popup-row"><span class="label">Lot size</span><span class="value">${fmt(props.area_feet)} sq ft</span></div>` : "",
     props.building_sf ? `<div class="popup-row"><span class="label">Building</span><span class="value">${fmt(props.building_sf)} sq ft</span></div>` : "",
     props.floor_area_ratio ? `<div class="popup-row"><span class="label">FAR</span><span class="value">${props.floor_area_ratio} (${props.far_cat || ""})</span></div>` : "",
+    props.foot_far ? `<div class="popup-row"><span class="label">FAR (footprint-adj.)</span><span class="value">${props.foot_far}</span></div>` : "",
     props.total_units ? `<div class="popup-row"><span class="label">Units</span><span class="value">${props.total_units}</span></div>` : "",
     props.year_built ? `<div class="popup-row"><span class="label">Year built</span><span class="value">${props.year_built}</span></div>` : "",
     totVal  ? `<div class="popup-row"><span class="label">Total appraised value (2025)</span><span class="value">${fmtMoney(totVal)}</span></div>` : "",
     imprVal ? `<div class="popup-row"><span class="label">Improvement value</span><span class="value">${fmtMoney(imprVal)}</span></div>` : "",
     landVal ? `<div class="popup-row"><span class="label">Land value</span><span class="value">${fmtMoney(landVal)}</span></div>` : "",
+    landVal ? `<div class="popup-row"><span class="label">Improvement / land ratio</span><span class="value">${(imprVal / landVal).toFixed(2)}</span></div>` : "",
     props.value_per_acre ? `<div class="popup-row"><span class="label">Value / acre</span><span class="value">${fmtMoney(props.value_per_acre)}</span></div>` : "",
     props.account_num ? `<div class="popup-row"><span class="label">Account</span><span class="value" style="font-size:11px">${props.account_num}</span></div>` : "",
     props.dart_station ? `<div class="popup-row" style="margin-top:4px;color:#4A90A4;font-size:12px">★ Within Half-mile DART station area</div>` : "",
@@ -1171,6 +1491,24 @@ function jobsPopup(props) {
   `;
 }
 
+function oiPopup(props) {
+  if (props.oi === null || props.oi === undefined) {
+    return `<div class="popup-title">Tract ${props.geoid}</div>
+      <div class="popup-row"><span class="label" style="color:#888">No mobility estimate</span></div>`;
+  }
+  return `<div class="popup-title">Tract ${props.geoid}</div>
+    <div class="popup-row"><span class="label">Expected adult earnings</span><span class="value">$${Number(props.oi).toLocaleString()}</span></div>
+    <div class="popup-row" style="margin-top:4px;color:#888;font-size:11px;line-height:1.4">Predicted household income at age 35 for children who grew up in this tract in 25th-percentile-income families (Opportunity Atlas).</div>`;
+}
+
+function buildOiLegend() {
+  const rows = OI_BINS.palette
+    .map((c, i) => `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${OI_BINS.labels[i]}</div>`)
+    .join("");
+  const nd = `<div class="swatch-row"><span class="swatch" style="background:${OI_NODATA}"></span>No estimate</div>`;
+  return `<div class="legend-block"><h3>Expected adult earnings</h3>${rows}${nd}</div>`;
+}
+
 function buildJobsLegend() {
   const swatches = JOBS_BINS.palette
     .map((c, i) => `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${JOBS_BINS.labels[i]}</div>`)
@@ -1178,7 +1516,7 @@ function buildJobsLegend() {
   const zero = `<div class="swatch-row"><span class="swatch" style="background:${JOBS_ZERO_COLOR}"></span>No jobs</div>`;
   return `
       <div class="legend-block">
-        <h3>Workplace jobs / acre (2022)</h3>
+        <h3>Workplace jobs / acre</h3>
         ${swatches}
         ${zero}
       </div>`;
@@ -1273,6 +1611,7 @@ async function enableLayer(key) {
   layer.enabled = true;
   refreshLegend();
   applyLayerOrder();   // place this layer in the user's preferred stack position
+  updateZoomHint();
 }
 
 function disableLayer(key) {
@@ -1283,6 +1622,33 @@ function disableLayer(key) {
   });
   layer.enabled = false;
   refreshLegend();
+  updateZoomHint();
+}
+
+// Zoom hint: when an enabled layer is hidden because the user is zoomed out past
+// its minzoom, show a small "zoom in to see ..." pill so it doesn't look broken.
+let zoomHintEl = null;
+function layerDisplayName(key) {
+  const cb = document.querySelector(`input[data-layer="${key}"]`);
+  const span = cb && cb.closest("label") && cb.closest("label").querySelector("span");
+  const name = span ? span.textContent.trim() : (LAYERS[key] ? LAYERS[key].label : key);
+  return name.replace(/^Show\s+/i, "");   // "Show street names" -> "street names"
+}
+function updateZoomHint() {
+  if (!zoomHintEl) return;
+  const z = map.getZoom();
+  const names = [];
+  for (const [key, l] of Object.entries(LAYERS)) {
+    if (l.enabled && typeof l.minzoom === "number" && z < l.minzoom - 0.01) {
+      names.push(layerDisplayName(key));
+    }
+  }
+  const uniq = [...new Set(names)];
+  if (!uniq.length) { zoomHintEl.style.display = "none"; return; }
+  const list = uniq.length <= 3 ? uniq.join(", ")
+    : `${uniq.slice(0, 2).join(", ")} +${uniq.length - 2} more`;
+  zoomHintEl.textContent = `🔍 Zoom in to see ${list}`;
+  zoomHintEl.style.display = "";
 }
 
 
@@ -1301,6 +1667,14 @@ function applyLayerOrder() {
   for (let i = items.length - 1; i >= 0; i--) {
     const cb = items[i].querySelector('input[type="checkbox"]');
     if (!cb) continue;
+    // "Street grid" is a master over several sub-layers (no data-layer of its own):
+    // order its sub-layers as a unit — Streets, Dead-ends, Alleys, then labels on top.
+    if (cb.id === "street-grid-master") {
+      for (const id of ["streets-grid-line", "streets-stub-line", "alley-line", "street-labels-symbol"]) {
+        if (map.getLayer(id)) map.moveLayer(id);
+      }
+      continue;
+    }
     let key = cb.dataset.layer;
     // Grouped (pop_change / hu_change): pick whichever sub-layer's radio
     // is currently selected.
@@ -1310,6 +1684,7 @@ function applyLayerOrder() {
         pop_change: { bg: "block_groups", tract: "tracts" },
         hu_change:  { bg: "bg_hu",        tract: "tract_hu" },
         value3d:    { total: "value_per_acre", improvement: "impr_per_acre", land: "land_per_acre" },
+        value2d:    { total: "value_per_acre_2d", improvement: "impr_per_acre_2d", land: "land_per_acre_2d" },
       }[group];
       if (groupMap) {
         const rb = document.querySelector(`input[name="${group}_level"]:checked`);
@@ -1347,6 +1722,13 @@ map.on("load", async () => {
       if (rb.checked) setBasemap(rb.value);
     });
   });
+
+  // Zoom hint pill — created once, then refreshed on zoom and on layer toggles.
+  zoomHintEl = document.createElement("div");
+  zoomHintEl.className = "zoom-hint";
+  zoomHintEl.style.display = "none";
+  map.getContainer().appendChild(zoomHintEl);
+  map.on("zoom", updateZoomHint);
 
   document.querySelectorAll('.layer-toggle input[type="checkbox"]').forEach((cb) => {
     cb.addEventListener("change", async (e) => {
@@ -1452,6 +1834,9 @@ map.on("load", async () => {
   initPermits();
   initChangeLayers();
   initValue3d();
+  initValue2d();
+  initStreetPattern();
+  initZoningMode();
 
   // Legend collapse / expand
   const legendEl = document.getElementById("legend");
@@ -2224,7 +2609,7 @@ function renderTodReport(idxStr) {
     <h3>Building floor-area ratio (FAR)</h3>
     ${renderPctBlock(s.quarter_mile.far_pct, s.half_mile.far_pct, FAR_ORDER, FAR_COLOR_FN)}
 
-    <h3>Decade built</h3>
+    <h3>Decade structure built</h3>
     ${renderPctBlock(s.quarter_mile.decade_pct, s.half_mile.decade_pct, DECADE_ORDER, DECADE_COLOR_FN)}
   `;
 }
@@ -2385,14 +2770,14 @@ function renderDistrictReport(idxStr) {
       ["Single-family units",             fmtNum(d.permit_units_sf)],
       ["Multifamily units",               fmtNum(d.permit_units_mf)],
       ["Commercial (incl. mixed-use)",    fmtNum(d.permit_units_com)],
-      ["Total dwelling units",            fmtNum(d.permit_units_total)],
+      ["Total new units permitted",       fmtNum(d.permit_units_total)],
     ])}
 
     <h3>Built environment</h3>
     ${singlePctBlock("Base zoning",     d.zoning_pct,    ZONING_ORDER, ZONING_COLOR_FN)}
     ${singlePctBlock("Land use",        d.land_use_pct,  LU_ORDER,     LU_COLOR_FN)}
     ${singlePctBlock("Building floor-area ratio (FAR)", d.far_pct, FAR_ORDER, FAR_COLOR_FN)}
-    ${singlePctBlock("Decade built",    d.decade_pct,    DECADE_ORDER, DECADE_COLOR_FN)}
+    ${singlePctBlock("Decade structure built", d.decade_pct, DECADE_ORDER, DECADE_COLOR_FN)}
   `;
 }
 
@@ -2913,3 +3298,392 @@ function initValue3d() {
     rb.addEventListener("change", () => { if (rb.checked && cb.checked) run(); });
   });
 }
+
+// 2D flat-fill property-value-per-acre group: same Total / Improvement / Land
+// radio pattern as value3d, no height/cap. Independent of the 3D toggle.
+const VALUE2D_MAP = { total: "value_per_acre_2d", improvement: "impr_per_acre_2d", land: "land_per_acre_2d" };
+function initValue2d() {
+  const cb = document.querySelector('input[data-layer-group="value2d"]');
+  if (!cb) return;
+  const selected = () => (document.querySelector('input[name="value2d_level"]:checked') || {}).value || "total";
+  async function apply() {
+    const sel = selected();
+    for (const [k, key] of Object.entries(VALUE2D_MAP)) {
+      const want = cb.checked && k === sel;
+      if (want && LAYERS[key] && !LAYERS[key].enabled) await enableLayer(key);
+      else if (!want && LAYERS[key] && LAYERS[key].enabled) disableLayer(key);
+    }
+  }
+  const run = async () => {
+    cb.parentElement.classList.add("loading");
+    try { await apply(); } finally { cb.parentElement.classList.remove("loading"); }
+  };
+  cb.addEventListener("change", run);
+  document.querySelectorAll('input[name="value2d_level"]').forEach((rb) => {
+    rb.addEventListener("change", () => { if (rb.checked && cb.checked) run(); });
+  });
+}
+
+
+// ---- Street pattern: dendricity / dead-ends / intersection density ---------
+// One grouped toggle with a metric radio, all from build_street_dendricity.py
+// (OSM via OSMnx). Palette runs teal (grid / well-connected) -> cream -> red
+// (cul-de-sac / dendritic). Dead-end share and intersection density spread DFW
+// far better than length-weighted dendricity (whose short stubs compress it),
+// so all three are offered. Bin edges are tuned to the 7-county distribution.
+const STREET_PAL = ["#1D4F66", "#4A90A4", "#A6CDE3", "#FAF5C5", "#FEA665", "#C44E52"];  // grid -> sprawl
+const STREET_NODATA = "#B8B0A0";
+const STREET_METRICS = {
+  dendricity:   { prop: "dendricity",           label: "Dendricity",
+                  edges: [0.02, 0.04, 0.07, 0.12, 0.22], colors: STREET_PAL,
+                  note: "tree-like share of street length · low = grid, high = cul-de-sac",
+                  fmt: (v) => (+v).toFixed(2) },
+  deadend:      { prop: "pct_deadend",          label: "Dead-end share",
+                  edges: [4, 8, 12, 18, 25], colors: STREET_PAL,
+                  note: "% of nodes that are culs-de-sac · low = grid",
+                  fmt: (v) => v + "%" },
+  intersection: { prop: "intersection_density", label: "Intersection density",
+                  edges: [50, 80, 105, 135, 165], colors: [...STREET_PAL].reverse(),
+                  note: "intersections per sq mi · high = grid",
+                  fmt: (v) => v + "/mi²" },
+};
+const streetState = { master: false, metric: "dendricity", added: false };
+
+function streetColor() {
+  const m = STREET_METRICS[streetState.metric];
+  const step = ["step", ["get", m.prop], m.colors[0]];
+  m.edges.forEach((e, i) => step.push(e, m.colors[i + 1]));
+  return ["case", ["==", ["coalesce", ["get", m.prop], -1], -1], STREET_NODATA, step];
+}
+
+function buildStreetLegend() {
+  const m = STREET_METRICS[streetState.metric];
+  const labels = [`&lt; ${m.fmt(m.edges[0])}`];
+  for (let i = 0; i < m.edges.length - 1; i++) labels.push(`${m.fmt(m.edges[i])} – ${m.fmt(m.edges[i + 1])}`);
+  labels.push(`&gt; ${m.fmt(m.edges[m.edges.length - 1])}`);
+  const rows = m.colors
+    .map((c, i) => `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${labels[i]}</div>`)
+    .join("");
+  const nd = `<div class="swatch-row"><span class="swatch" style="background:${STREET_NODATA}"></span>No street data</div>`;
+  return `<div class="legend-block">
+    <h3>Street pattern · ${m.label}</h3>
+    <div class="muted" style="margin:-2px 0 5px 0">${m.note}</div>
+    ${rows}${nd}
+  </div>`;
+}
+
+function streetPopup(p) {
+  if (p.dendricity == null) {
+    return `<div class="popup-title">Tract ${p.geoid}</div>` +
+      `<div class="popup-row" style="color:#888;font-size:11px">No street-network data.</div>`;
+  }
+  const grid = p.pct_deadend != null && p.pct_deadend < 6 && p.intersection_density > 110;
+  const pod = p.pct_deadend != null && p.pct_deadend > 20;
+  const interp = grid ? "grid-like (well connected)" : pod ? "dendritic (cul-de-sac / suburban)" : "mixed";
+  return `
+    <div class="popup-title">Tract ${p.geoid}</div>
+    <div class="popup-row" style="color:#666;font-size:11px;margin-bottom:4px">Street pattern — ${interp}</div>
+    <div class="popup-row"><span class="label">Dendricity</span><span class="value">${(+p.dendricity).toFixed(2)}</span></div>
+    <div class="popup-row"><span class="label">Dead-end share</span><span class="value">${p.pct_deadend == null ? "—" : p.pct_deadend + "%"}</span></div>
+    <div class="popup-row"><span class="label">Intersection density</span><span class="value">${fmt(p.intersection_density)} / sq mi</span></div>
+    <div class="popup-row"><span class="label">Street length</span><span class="value">${fmt(p.street_mi)} mi</span></div>
+  `;
+}
+
+LAYERS.street_pattern = {
+  label: "Street pattern",
+  layerIds: ["street-fill", "street-outline"],
+  enabled: false,
+  legend: () => buildStreetLegend(),
+};
+
+function initStreetPattern() {
+  const cb = document.querySelector('input[data-layer-group="street_pattern"]');
+  if (!cb) return;
+  function apply() {
+    const vis = streetState.master ? "visible" : "none";
+    ["street-fill", "street-outline"].forEach((id) => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    });
+    if (streetState.added && streetState.master) {
+      map.setPaintProperty("street-fill", "fill-color", streetColor());
+    }
+    LAYERS.street_pattern.enabled = streetState.master;
+    refreshLegend();
+  }
+  async function enable() {
+    if (!map.getSource("street-src")) {
+      const r = await fetch("data/street_dendricity_tracts.geojson");
+      map.addSource("street-src", { type: "geojson", data: await r.json() });
+    }
+    if (!streetState.added) {
+      map.addLayer({ id: "street-fill", type: "fill", source: "street-src",
+        paint: { "fill-color": streetColor(), "fill-opacity": 0.78 } }, beneathTopLayers());
+      map.addLayer({ id: "street-outline", type: "line", source: "street-src",
+        paint: { "line-color": "#FFFFFF", "line-width": 0.4, "line-opacity": 0.5 } }, beneathTopLayers());
+      map.on("click", "street-fill", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        new maplibregl.Popup({ closeButton: true })
+          .setLngLat(e.lngLat).setHTML(streetPopup(f.properties)).addTo(map);
+      });
+      map.on("mouseenter", "street-fill", () => map.getCanvas().style.cursor = "pointer");
+      map.on("mouseleave", "street-fill", () => map.getCanvas().style.cursor = "");
+      streetState.added = true;
+      LAYERS.street_pattern.layerIds.forEach((id) => layersAdded.add(id));
+    }
+    apply();
+  }
+  cb.addEventListener("change", async () => {
+    streetState.master = cb.checked;
+    if (cb.checked) {
+      cb.parentElement.classList.add("loading");
+      try { await enable(); applyLayerOrder(); }
+      finally { cb.parentElement.classList.remove("loading"); }
+    } else {
+      apply();
+    }
+  });
+  document.querySelectorAll('input[name="street_pattern_metric"]').forEach((rb) => {
+    rb.addEventListener("change", () => { if (rb.checked) { streetState.metric = rb.value; apply(); } });
+  });
+}
+
+
+// ---- Street grid (OSM line network, classified grid vs. cul-de-sac) --------
+// The actual streets within the City of Dallas, colored by the same bridge/cycle
+// test as dendricity: teal = grid / looped (connected), red = cul-de-sac /
+// dead-end. Single file (~9 MB), zoom-gated (minzoom 9).
+// "Street grid" is a master checkbox over four independent sub-layers: Streets,
+// Dead-ends, Alleys, Street names. The drive network (data/streets_dallas.geojson,
+// property `kind`) is split into Streets (grid / connected) and Dead-ends
+// (cul-de-sac / network-bridge) so each can be toggled separately. All four share
+// one collapsed "Street grid" legend block via legendGroup.
+LAYERS.streets_grid = {
+  label: "Streets",
+  minzoom: 9,
+  legendGroup: "Street grid",
+  legendOrder: 1,
+  legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-color:#1D4F66;border-top-width:2px"></span>Streets (grid / connected)</div>`,
+  sourceId: "street-grid-src",
+  sourceFile: "data/streets_dallas.geojson",
+  layerIds: ["streets-grid-line"],
+  addLayers: () => {
+    map.addLayer({
+      id: "streets-grid-line",
+      type: "line",
+      source: "street-grid-src",
+      minzoom: 9,
+      filter: ["!=", ["get", "kind"], "stub"],
+      paint: {
+        "line-color": "#1D4F66",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.3, 11, 0.5, 14, 1.1, 17, 2.2],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 13, 0.85],
+      },
+    }, beneathTopLayers());
+  },
+  popup: () => "",
+  clickLayer: null,
+  legend: () => "",
+};
+
+LAYERS.streets_deadend = {
+  label: "Dead-ends",
+  minzoom: 9,
+  legendGroup: "Street grid",
+  legendOrder: 2,
+  legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-color:#C44E52;border-top-width:2px"></span>Dead-ends / cul-de-sac</div>`,
+  sourceId: "street-grid-src",
+  sourceFile: "data/streets_dallas.geojson",
+  layerIds: ["streets-stub-line"],
+  addLayers: () => {
+    map.addLayer({
+      id: "streets-stub-line",
+      type: "line",
+      source: "street-grid-src",
+      minzoom: 9,
+      filter: ["==", ["get", "kind"], "stub"],
+      paint: {
+        "line-color": "#C44E52",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.4, 11, 0.7, 14, 1.4, 17, 2.6],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.6, 13, 0.9],
+      },
+    }, beneathTopLayers());
+  },
+  popup: () => "",
+  clickLayer: null,
+  legend: () => "",
+};
+
+LAYERS.buildings = {
+  label: "Building footprints",
+  minzoom: 13,
+  sourceId: "buildings-src",
+  sourceFile: "data/buildings_dallas.geojson",
+  layerIds: ["buildings-3d"],
+  addLayers: () => {
+    const h = ["coalesce", ["get", "height_m"], 6];
+    map.addLayer({
+      id: "buildings-3d",
+      type: "fill-extrusion",
+      source: "buildings-src",
+      minzoom: 13,   // 3D extrusion of ~350k buildings — render once zoomed in; tilt to see height
+      paint: {
+        "fill-extrusion-height": h,
+        "fill-extrusion-base": 0,
+        "fill-extrusion-opacity": 0.92,
+        "fill-extrusion-vertical-gradient": true,
+        // colored by footprint source: light gray = Microsoft ML, dark gray = OSM
+        "fill-extrusion-color": ["match", ["get", "src"],
+          "osm", "#6F7884",
+          /* default (ms) */ "#DAD4C8"],
+      },
+    }, beneathTopLayers());
+  },
+  popup: () => "",
+  clickLayer: null,
+  legend: () => `
+    <div class="legend-block">
+      <h3>Building footprints</h3>
+      <div class="swatch-row"><span class="swatch" style="background:#DAD4C8"></span>Microsoft ML building footprints</div>
+      <div class="swatch-row"><span class="swatch" style="background:#6F7884"></span>OSM building footprints</div>
+      <div class="muted" style="margin-top:4px;line-height:1.4">Extruded by height. Tilt the map (right-drag) and zoom in to view.</div>
+    </div>`,
+};
+
+LAYERS.alleys = {
+  label: "Alleys",
+  minzoom: 9,
+  legendGroup: "Street grid",
+  legendOrder: 3,
+  legendRow: () => `<div class="swatch-row"><span class="line-swatch" style="border-top-color:#E8862E;border-top-width:2px"></span>Alleys</div>`,
+  sourceId: "alleys-src",
+  sourceFile: "data/alleys_dallas.geojson",
+  layerIds: ["alley-line"],
+  addLayers: () => {
+    map.addLayer({
+      id: "alley-line",
+      type: "line",
+      source: "alleys-src",
+      minzoom: 9,
+      paint: {
+        "line-color": "#E8862E",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.6, 11, 1.0, 14, 2.0, 17, 4.0],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.55, 13, 0.9],
+      },
+    }, beneathTopLayers());
+  },
+  popup: () => "",
+  clickLayer: null,
+  legend: () => "",
+};
+
+// "Street grid" master checkbox (#street-grid-master) governs four independent
+// sub-layers: Streets, Dead-ends, Alleys, Street names. Checking the master reveals
+// the sub-row and turns on the two street layers by default; unchecking turns the
+// whole group off. Toggling any sub keeps the master + row in sync.
+(function initStreetGroup() {
+  const master = document.getElementById("street-grid-master");
+  const row = document.getElementById("street-subrow");
+  if (!master || !row) return;
+  const subs = ["streets_grid", "streets_deadend", "alleys", "street_labels"]
+    .map((k) => document.querySelector(`input[data-layer="${k}"]`));
+  const defaults = new Set(["streets_grid", "streets_deadend"]);
+  const anyOn = () => subs.some((cb) => cb && cb.checked);
+  const showRow = () => { row.style.display = (master.checked || anyOn()) ? "flex" : "none"; };
+  const fire = (cb, on) => {
+    if (!cb || cb.checked === on) return;
+    cb.checked = on;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  master.addEventListener("change", () => {
+    if (master.checked) {
+      if (!anyOn()) subs.forEach((cb) => { if (cb && defaults.has(cb.dataset.layer)) fire(cb, true); });
+    } else {
+      subs.forEach((cb) => fire(cb, false));
+    }
+    showRow();
+  });
+  subs.forEach((cb) => {
+    if (!cb) return;
+    cb.addEventListener("change", () => { master.checked = anyOn(); showRow(); });
+  });
+  showRow();
+})();
+
+LAYERS.parking = {
+  label: "Surface parking",
+  minzoom: 9,
+  sourceId: "parking-src",
+  sourceFile: "data/parking_dallas.geojson",
+  layerIds: ["parking-fill", "parking-outline"],
+  addLayers: () => {
+    map.addLayer({
+      id: "parking-fill",
+      type: "fill",
+      source: "parking-src",
+      minzoom: 9,
+      paint: { "fill-color": "#8E6FB0", "fill-opacity": 0.55 },
+    }, beneathTopLayers());
+    map.addLayer({
+      id: "parking-outline",
+      type: "line",
+      source: "parking-src",
+      minzoom: 12,
+      paint: { "line-color": "#5E4B8B", "line-width": 0.5, "line-opacity": 0.7 },
+    }, beneathTopLayers());
+  },
+  popup: (props) => `
+    <div class="popup-title">Surface parking lot</div>
+    <div class="popup-row"><span class="label">Area</span><span class="value">${props.area_acres ?? "?"} acres</span></div>
+    <div class="popup-row"><span class="label">Source</span><span class="value">OSM amenity=parking</span></div>`,
+  clickLayer: "parking-fill",
+  legend: () => `
+    <div class="legend-block">
+      <h3>Surface parking</h3>
+      <div class="swatch-row"><span class="swatch" style="background:#8E6FB0"></span>Surface parking lot</div>
+    </div>`,
+};
+
+// Optional street-name labels — a sub-checkbox under "Street grid". Shares the
+// street-grid source (label segments are the same OSM line features, now carrying
+// `name`), so it works whether or not the street lines themselves are shown.
+LAYERS.street_labels = {
+  label: "Street names",
+  minzoom: 14,
+  sourceId: "street-grid-src",
+  sourceFile: null,
+  layerIds: ["street-labels-symbol"],
+  customLoad: async () => {
+    if (!map.getSource("street-grid-src")) {
+      const data = await (await fetch("data/streets_dallas.geojson")).json();
+      map.addSource("street-grid-src", { type: "geojson", data });
+      sourcesAdded.add("street-grid-src");
+    }
+  },
+  addLayers: () => {
+    map.addLayer({
+      id: "street-labels-symbol",
+      type: "symbol",
+      source: "street-grid-src",
+      minzoom: 14,
+      layout: {
+        "symbol-placement": "line",
+        "text-field": ["coalesce", ["get", "name"], ""],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "symbol-spacing": 300,
+        "text-max-angle": 30,
+      },
+      paint: {
+        "text-color": "#3A3733",
+        "text-halo-color": "#FFFFFF",
+        "text-halo-width": 1.4,
+      },
+    }, beneathTopLayers());
+  },
+  popup: () => "",
+  clickLayer: null,
+  legend: () => "",
+};
