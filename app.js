@@ -170,126 +170,45 @@ const ZONING_COLORS = {
   "Other":                 "#C4BDB3",
 };
 
-// ---- Base-zoning display modes ----------------------------------------------
-// One fill+outline layer pair, three modes selected by radios under "Base zoning":
-//   category (default) — color by the 10 zone categories (ZONING_COLORS)
-//   sf                 — show ONLY single-family R-districts, ramped by lot size
-//   all                — color every unique zone_dist (~60) distinctly
-// Switching a mode just swaps the fill-color expression, the layer filter, and the
-// legend (mirrors the Street-pattern metric pattern; see initStreetPattern).
-const zoningState = { mode: "category", allBuilt: false, allOrder: [], allColors: {}, allCatOf: {} };
-
-// Single-family districts, densest (smallest min-lot) -> largest; darkest = R-5.
-// Matched on zone_dist exactly as stored in data/zoning.geojson.
-const ZONING_SF_RAMP = [
-  ["R-5(A)",     "#08306B", "R-5 · 5,000 sf min lot (densest)"],
-  ["R-7.5(A)",   "#08519C", "R-7.5 · 7,500 sf"],
-  ["R-10(A)",    "#2171B5", "R-10 · 10,000 sf"],
-  ["R-13(A)",    "#4292C6", "R-13 · 13,000 sf"],
-  ["R-16(A)",    "#6BAED6", "R-16 · 16,000 sf"],
-  ["R-1/2ac(A)", "#9ECAE1", "R-½ acre · ~21,780 sf"],
-  ["R-1ac(A)",   "#C6DBEF", "R-1 acre · ~43,560 sf (largest)"],
-];
-
-function hslToHex(h, s, l) {
-  s /= 100; l /= 100;
-  const k = (n) => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n) => {
-    const c = l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
-    return Math.round(255 * c).toString(16).padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-// n maximally-distinct colors via the golden-angle hue step, cycling three
-// lightness/saturation bands so even adjacent districts read apart.
-function distinctColors(n) {
-  const L = [44, 60, 73], S = [72, 84, 62], out = [];
-  for (let i = 0; i < n; i++) out.push(hslToHex((i * 137.508) % 360, S[i % 3], L[i % 3]));
-  return out;
-}
-
-// Build the "every unique zone" palette once, from the loaded GeoJSON (browser-
-// cached after the layer's first fetch). Districts sorted by category then name so
-// the legend groups sensibly; colors assigned by golden-angle so neighbors differ.
-async function ensureZoningAll() {
-  if (zoningState.allBuilt) return;
-  const gj = await (await fetch("data/zoning.geojson")).json();
-  const catOf = {};
-  for (const ft of gj.features) {
-    const zd = ft.properties.zone_dist;
-    if (zd && !(zd in catOf)) catOf[zd] = ft.properties.category || "Other";
-  }
-  const catOrder = Object.keys(ZONING_COLORS);
-  const dists = Object.keys(catOf).sort((a, b) => {
-    const ca = catOrder.indexOf(catOf[a]), cb = catOrder.indexOf(catOf[b]);
-    return ca !== cb ? ca - cb : a.localeCompare(b, undefined, { numeric: true });
-  });
-  const cols = distinctColors(dists.length);
-  zoningState.allOrder = dists;
-  zoningState.allCatOf = catOf;
-  zoningState.allColors = Object.fromEntries(dists.map((d, i) => [d, cols[i]]));
-  zoningState.allBuilt = true;
-}
+// ---- Base-zoning district selection -----------------------------------------
+// One fill+outline pair, colored by category (ZONING_COLORS). A collapsible
+// per-category menu (built from data/zoning_districts.json) lets the user filter
+// the layer to individual zone_dist values. zoningState.selected = Set of checked
+// districts, or null = show all.
+const zoningState = { selected: null, catOf: {}, total: 0, built: false };
+let zoningMenuReady = null;   // promise that resolves once the zoning district menu is built
 
 function zoningFillColor() {
-  if (zoningState.mode === "sf") {
-    const e = ["match", ["get", "zone_dist"]];
-    ZONING_SF_RAMP.forEach(([zd, c]) => e.push(zd, c));
-    e.push("rgba(0,0,0,0)");                 // everything else: hidden
-    return e;
-  }
-  if (zoningState.mode === "all" && zoningState.allBuilt) {
-    const e = ["match", ["get", "zone_dist"]];
-    zoningState.allOrder.forEach((zd) => e.push(zd, zoningState.allColors[zd]));
-    e.push("#CCCCCC");
-    return e;
-  }
-  const e = ["match", ["get", "category"]];  // category (default)
+  const e = ["match", ["get", "category"]];
   Object.entries(ZONING_COLORS).forEach(([cat, c]) => e.push(cat, c));
   e.push("#C4BDB3");
   return e;
 }
 
 function zoningFilter() {
-  if (zoningState.mode === "sf")
-    return ["in", ["get", "zone_dist"], ["literal", ZONING_SF_RAMP.map((r) => r[0])]];
-  return null;                               // category / all: show every feature
+  if (!zoningState.selected || zoningState.selected.size >= zoningState.total) return null;
+  return ["in", ["get", "zone_norm"], ["literal", [...zoningState.selected]]];   // base district (parentheticals merged)
 }
 
 function buildZoningLegend() {
-  if (zoningState.mode === "sf") {
-    const rows = ZONING_SF_RAMP.map(([, c, lab]) =>
-      `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${lab}</div>`).join("");
-    return `<div class="legend-block"><h3>Single-Family Zoning</h3>
-      <div class="muted" style="margin:-2px 0 5px 0">By minimum lot size · darkest = densest</div>${rows}</div>`;
+  let cats = Object.keys(ZONING_COLORS);
+  const filtered = zoningState.selected && zoningState.selected.size < zoningState.total;
+  if (filtered) {
+    const have = new Set();
+    for (const zd of zoningState.selected) { const c = zoningState.catOf[zd]; if (c) have.add(c); }
+    cats = cats.filter((c) => have.has(c));
   }
-  if (zoningState.mode === "all" && zoningState.allBuilt) {
-    const catOrder = Object.keys(ZONING_COLORS), shown = new Set();
-    let body = "";
-    const block = (head, items) => {
-      if (!items.length) return "";
-      items.forEach((zd) => shown.add(zd));
-      return `<div class="muted" style="margin:5px 0 1px;font-weight:600">${head}</div>` +
-        items.map((zd) =>
-          `<div class="swatch-row"><span class="swatch" style="background:${zoningState.allColors[zd]}"></span>${zd}</div>`).join("");
-    };
-    for (const cat of catOrder)
-      body += block(cat, zoningState.allOrder.filter((zd) => zoningState.allCatOf[zd] === cat));
-    body += block("Other districts", zoningState.allOrder.filter((zd) => !shown.has(zd)));
-    return `<div class="legend-block"><h3>Every Zoning District (${zoningState.allOrder.length})</h3>
-      <div style="max-height:320px;overflow:auto;padding-right:2px">${body}</div></div>`;
-  }
-  const rows = Object.entries(ZONING_COLORS).map(([cat, c]) =>
-    `<div class="swatch-row"><span class="swatch" style="background:${c}"></span>${cat}</div>`).join("");
-  return `<div class="legend-block"><h3>Base Zoning</h3>${rows}</div>`;
+  const rows = cats.map((cat) =>
+    `<div class="swatch-row"><span class="swatch" style="background:${ZONING_COLORS[cat]}"></span>${cat}</div>`).join("");
+  const sub = filtered
+    ? `<div class="muted" style="margin:-2px 0 5px 0">${zoningState.selected.size} of ${zoningState.total} districts shown</div>`
+    : "";
+  return `<div class="legend-block"><h3>Base Zoning</h3>${sub}${rows || '<div class="muted">No districts selected</div>'}</div>`;
 }
 
-// Apply the current zoning mode to the live layer (paint + filter) and the legend.
-async function applyZoningMode() {
-  if (zoningState.mode === "all") await ensureZoningAll();
+// Apply the current district selection to the live layer (filter) + legend.
+function applyZoningSelection() {
   if (LAYERS.zoning && LAYERS.zoning.enabled && map.getLayer("zoning-fill")) {
-    map.setPaintProperty("zoning-fill", "fill-color", zoningFillColor());
     const f = zoningFilter();
     map.setFilter("zoning-fill", f);
     map.setFilter("zoning-outline", f);
@@ -297,18 +216,86 @@ async function applyZoningMode() {
   refreshLegend();
 }
 
-function initZoningMode() {
-  const radios = document.querySelectorAll('input[name="zoning_mode"]');
-  if (!radios.length) return;
-  radios.forEach((rb) => {
-    rb.addEventListener("change", async () => {
-      if (!rb.checked) return;
-      zoningState.mode = rb.value;
-      const wrap = document.querySelector('input[data-layer="zoning"]').parentElement;
-      wrap.classList.add("loading");
-      try { await applyZoningMode(); } finally { wrap.classList.remove("loading"); }
+function recomputeZoningSelection() {
+  const checked = [...document.querySelectorAll("#zoning-zone-menu .zone-cb:checked")].map((b) => b.dataset.zd);
+  zoningState.selected = checked.length === zoningState.total ? null : new Set(checked);
+  applyZoningSelection();
+  scheduleHashWrite();
+}
+
+function syncZoningCatAll(catEl) {
+  const all = catEl.querySelector(".zone-cat-all");
+  const boxes = [...catEl.querySelectorAll(".zone-cb")];
+  const on = boxes.filter((b) => b.checked).length;
+  all.checked = on === boxes.length;
+  all.indeterminate = on > 0 && on < boxes.length;
+}
+
+// Build the collapsible category -> district checkbox menu under "Base zoning".
+async function initZoningMenu() {
+  const host = document.getElementById("zoning-zone-menu");
+  if (!host) return;
+  let cats;
+  try {
+    cats = (await (await fetch("data/zoning_districts.json")).json()).categories;
+  } catch (e) { return; }
+  zoningState.catOf = {};
+  zoningState.total = 0;
+  for (const g of cats) for (const z of g.zones) { zoningState.catOf[z.zd] = g.category; zoningState.total++; }
+
+  const actions = '<div class="zone-actions">' +
+    '<button type="button" class="zone-act" data-act="all">Select all</button>' +
+    '<span class="zone-act-sep">·</span>' +
+    '<button type="button" class="zone-act" data-act="none">Deselect all</button></div>';
+  host.innerHTML = actions + cats.map((g) => {
+    const sw = ZONING_COLORS[g.category] || "#C4BDB3";
+    const items = g.zones.map((z) => {
+      const a = z.sqmi >= 0.01 ? z.sqmi.toFixed(2) : "<0.01";
+      return `<label class="zone-item"><input type="checkbox" class="zone-cb" data-zd="${z.zd}" checked />` +
+        `<span class="zone-text">${z.zd} <span class="zone-area">(${a} sq mi)</span></span></label>`;
+    }).join("");
+    return `<div class="zone-cat">
+      <div class="zone-cat-head">
+        <span class="zone-caret">▸</span>
+        <input type="checkbox" class="zone-cat-all" checked title="Toggle all ${g.category}" />
+        <span class="zone-sw" style="background:${sw}"></span>
+        <span class="zone-cat-name">${g.category}</span>
+        <span class="zone-cat-count">${g.zones.length}</span>
+      </div>
+      <div class="zone-cat-list">${items}</div>
+    </div>`;
+  }).join("");
+
+  host.querySelectorAll(".zone-cat-head").forEach((head) => {
+    head.addEventListener("click", (e) => {
+      if (e.target.classList.contains("zone-cat-all")) return;   // checkbox handles itself
+      const cat = head.parentElement;
+      cat.classList.toggle("open");
+      head.querySelector(".zone-caret").textContent = cat.classList.contains("open") ? "▾" : "▸";
     });
   });
+  host.querySelectorAll(".zone-cat-all").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      cb.closest(".zone-cat").querySelectorAll(".zone-cb").forEach((z) => { z.checked = cb.checked; });
+      cb.indeterminate = false;
+      recomputeZoningSelection();
+    });
+  });
+  host.querySelectorAll(".zone-cb").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      syncZoningCatAll(cb.closest(".zone-cat"));
+      recomputeZoningSelection();
+    });
+  });
+  host.querySelectorAll(".zone-act").forEach((b) => {
+    b.addEventListener("click", () => {
+      const on = b.dataset.act === "all";
+      host.querySelectorAll(".zone-cb").forEach((z) => { z.checked = on; });
+      host.querySelectorAll(".zone-cat-all").forEach((c) => { c.checked = on; c.indeterminate = false; });
+      recomputeZoningSelection();
+    });
+  });
+  zoningState.built = true;
 }
 
 // Land use definitions (data-driven). The `dataValue` is what the GeoJSON
@@ -1623,6 +1610,7 @@ function disableLayer(key) {
   layer.enabled = false;
   refreshLegend();
   updateZoomHint();
+  updateWaterMask();
 }
 
 // Zoom hint: when an enabled layer is hidden because the user is zoomed out past
@@ -1649,6 +1637,47 @@ function updateZoomHint() {
     : `${uniq.slice(0, 2).join(", ")} +${uniq.length - 2} more`;
   zoomHintEl.textContent = `🔍 Zoom in to see ${list}`;
   zoomHintEl.style.display = "";
+}
+
+// Water mask: covers OSM water bodies on the zoning / land-use / FAR / decade fills
+// so lakes and the river don't read as a zoning or land-use category. Visible only
+// while one of those four layers is on; positioned just above the topmost of them.
+const WATER_MASK_LAYERS = ["zoning", "land_use", "far_footprint", "decade_built"];
+const WATER_MASK_FILLS = ["decade-built-fill", "far-foot-fill", "land-use-fill", "zoning-fill"];
+let waterMaskPromise = null;
+function ensureWaterMask() {
+  if (!waterMaskPromise) {
+    waterMaskPromise = (async () => {
+      const data = await (await fetch("data/water_dallas.geojson")).json();
+      if (!map.getSource("water-mask-src")) map.addSource("water-mask-src", { type: "geojson", data });
+      if (!map.getLayer("water-mask-fill")) {
+        map.addLayer({
+          id: "water-mask-fill", type: "fill", source: "water-mask-src",
+          layout: { visibility: "none" },
+          paint: { "fill-color": "#b3cdd9" },   // pale water, masks the choropleth beneath
+        }, beneathTopLayers());
+      }
+    })();
+  }
+  return waterMaskPromise;
+}
+function updateWaterMask() {
+  const anyOn = WATER_MASK_LAYERS.some((k) => LAYERS[k] && LAYERS[k].enabled);
+  if (!anyOn) {
+    if (map.getLayer("water-mask-fill")) map.setLayoutProperty("water-mask-fill", "visibility", "none");
+    return;
+  }
+  ensureWaterMask().then(() => {
+    if (!map.getLayer("water-mask-fill")) return;
+    map.setLayoutProperty("water-mask-fill", "visibility", "visible");
+    const order = map.getStyle().layers.map((l) => l.id);
+    let topIdx = -1;
+    for (const f of WATER_MASK_FILLS) { const i = order.indexOf(f); if (i > topIdx) topIdx = i; }
+    const before = topIdx >= 0 ? order[topIdx + 1] : undefined;
+    if (before !== "water-mask-fill") {
+      try { map.moveLayer("water-mask-fill", before); } catch (e) { /* already topmost */ }
+    }
+  });
 }
 
 
@@ -1710,6 +1739,7 @@ function applyLayerOrder() {
   for (const id of ["active-half-fill", "active-half-line", "active-quarter-line"]) {
     if (map.getLayer(id)) map.moveLayer(id);
   }
+  updateWaterMask();   // keep the water mask above the zoning/land-use/FAR/decade fills
 }
 
 
@@ -1836,7 +1866,7 @@ map.on("load", async () => {
   initValue3d();
   initValue2d();
   initStreetPattern();
-  initZoningMode();
+  zoningMenuReady = initZoningMenu();
 
   // Legend collapse / expand
   const legendEl = document.getElementById("legend");
@@ -1847,7 +1877,131 @@ map.on("load", async () => {
       collapseBtn.textContent = legendEl.classList.contains("collapsed") ? "+" : "−";
     });
   }
+
+  // ---- Shareable view URLs: restore from the hash, then keep it in sync ----
+  await applyMapState(location.hash.replace(/^#/, ""));
+  map.on("moveend", scheduleHashWrite);
+  const sidebarEl = document.getElementById("sidebar");
+  if (sidebarEl) sidebarEl.addEventListener("change", scheduleHashWrite);
+  const copyBtn = document.getElementById("copy-view-link");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      history.replaceState(null, "", "#" + serializeMapState());
+      try {
+        await navigator.clipboard.writeText(location.href);
+        copyBtn.textContent = "✓ Link copied";
+      } catch (e) {
+        copyBtn.textContent = "Press Ctrl+C to copy";
+      }
+      setTimeout(() => { copyBtn.textContent = "🔗 Copy link to this view"; }, 1800);
+    });
+  }
 });
+
+
+// ---- Shareable view URL state ----------------------------------------------
+// Serialize map view + control state into the URL hash so every view has a unique
+// shareable link; applyMapState() restores it on load. List separator "~" (zone
+// codes contain ".", e.g. R-7.5); key:value pairs joined with ":".
+function serializeMapState() {
+  const c = map.getCenter();
+  const params = new URLSearchParams();
+  params.set("m", [c.lng.toFixed(5), c.lat.toFixed(5), map.getZoom().toFixed(2),
+                   Math.round(map.getPitch()), Math.round(map.getBearing())].join(","));
+  const base = document.querySelector('input[name="basemap"]:checked');
+  if (base) params.set("base", base.value);
+  const on = [];
+  document.querySelectorAll('input[data-layer]:checked, input[data-layer-group]:checked')
+    .forEach((cb) => on.push(cb.dataset.layer || cb.dataset.layerGroup));
+  params.set("on", on.join("~"));
+  const rad = [];
+  document.querySelectorAll('input[type="radio"]:checked').forEach((rb) => {
+    if (rb.name && rb.name !== "basemap") rad.push(`${rb.name}:${rb.value}`);
+  });
+  if (rad.length) params.set("rad", rad.join("~"));
+  const cap = document.querySelector('input[data-value-cap]');
+  if (cap) params.set("cap", cap.checked ? "1" : "0");
+  const sld = [];
+  ["permits-year-start", "permits-year-end", "rent-yr-start", "rent-yr-end",
+   "value-yr-start", "value-yr-end"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) sld.push(`${id}:${el.value}`);
+  });
+  if (sld.length) params.set("s", sld.join("~"));
+  if (zoningState.selected && zoningState.total && zoningState.selected.size < zoningState.total)
+    params.set("zon", [...zoningState.selected].join("~"));
+  return params.toString();
+}
+
+let _hashWriteTimer = null;
+function scheduleHashWrite() {
+  clearTimeout(_hashWriteTimer);
+  _hashWriteTimer = setTimeout(() => {
+    try { history.replaceState(null, "", "#" + serializeMapState()); } catch (e) { /* ignore */ }
+  }, 400);
+}
+
+async function applyMapState(hashStr) {
+  const params = new URLSearchParams(hashStr || "");
+  if (![...params.keys()].length) return;
+  try {
+    const base = params.get("base");
+    if (base) {
+      const rb = document.querySelector(`input[name="basemap"][value="${base}"]`);
+      if (rb) { rb.checked = true; setBasemap(base); }
+    }
+    // sub-radios first (DOM only) so grouped layers read the right value when enabled
+    (params.get("rad") || "").split("~").filter(Boolean).forEach((pair) => {
+      const i = pair.indexOf(":");
+      const rb = document.querySelector(`input[name="${pair.slice(0, i)}"][value="${pair.slice(i + 1)}"]`);
+      if (rb) rb.checked = true;
+    });
+    if (params.has("cap")) {
+      valueCapEnabled = params.get("cap") === "1";
+      document.querySelectorAll('input[data-value-cap]').forEach((c) => { c.checked = valueCapEnabled; });
+    }
+    (params.get("s") || "").split("~").filter(Boolean).forEach((pair) => {
+      const i = pair.indexOf(":");
+      const el = document.getElementById(pair.slice(0, i));
+      if (el) el.value = pair.slice(i + 1);
+    });
+    // enable/disable every layer toggle to match the on-list
+    if (params.has("on")) {
+      const want = new Set((params.get("on") || "").split("~").filter(Boolean));
+      document.querySelectorAll('input[data-layer], input[data-layer-group]').forEach((cb) => {
+        const key = cb.dataset.layer || cb.dataset.layerGroup;
+        const shouldBe = want.has(key);
+        if (cb.checked !== shouldBe) { cb.checked = shouldBe; cb.dispatchEvent(new Event("change", { bubbles: true })); }
+      });
+      const anyStreet = ["streets_grid", "streets_deadend", "alleys", "street_labels"].some((k) => want.has(k));
+      const master = document.getElementById("street-grid-master");
+      const sub = document.getElementById("street-subrow");
+      if (master) master.checked = anyStreet;
+      if (sub) sub.style.display = anyStreet ? "" : "none";
+    }
+    // refresh sliders now that their layers are live (updates labels + expression)
+    (params.get("s") || "").split("~").filter(Boolean).forEach((pair) => {
+      const el = document.getElementById(pair.slice(0, pair.indexOf(":")));
+      if (el) el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // zoning district selection (wait for the async menu to build)
+    const zon = params.get("zon");
+    if (zon != null && zoningMenuReady) {
+      await zoningMenuReady;
+      const want = new Set(zon.split("~").filter(Boolean));
+      document.querySelectorAll("#zoning-zone-menu .zone-cb").forEach((cb) => { cb.checked = want.has(cb.dataset.zd); });
+      document.querySelectorAll("#zoning-zone-menu .zone-cat").forEach((c) => syncZoningCatAll(c));
+      recomputeZoningSelection();
+    }
+    const m = params.get("m");
+    if (m) {
+      const [lng, lat, z, pitch, bearing] = m.split(",").map(Number);
+      map.jumpTo({ center: [lng, lat], zoom: z, pitch: pitch || 0, bearing: bearing || 0 });
+    }
+  } catch (e) {
+    console.warn("View restore failed:", e);
+  }
+}
 
 
 // ---- Building permits layer ------------------------------------------------

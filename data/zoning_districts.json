@@ -1,0 +1,270 @@
+{
+"categories": [
+{
+"category": "Single-Family",
+"zones": [
+{
+"zd": "R-5",
+"sqmi": 10.99
+},
+{
+"zd": "R-7.5",
+"sqmi": 96.607
+},
+{
+"zd": "R-10",
+"sqmi": 16.974
+},
+{
+"zd": "R-13",
+"sqmi": 0.551
+},
+{
+"zd": "R-16",
+"sqmi": 8.541
+},
+{
+"zd": "R-1/2ac",
+"sqmi": 2.978
+},
+{
+"zd": "R-1ac",
+"sqmi": 7.629
+},
+{
+"zd": "D",
+"sqmi": 1.915
+},
+{
+"zd": "MH",
+"sqmi": 0.908
+},
+{
+"zd": "A",
+"sqmi": 58.166
+}
+]
+},
+{
+"category": "Townhouse / Cluster",
+"zones": [
+{
+"zd": "TH-1",
+"sqmi": 0.89
+},
+{
+"zd": "TH-2",
+"sqmi": 2.096
+},
+{
+"zd": "TH-3",
+"sqmi": 2.331
+},
+{
+"zd": "CH",
+"sqmi": 0.367
+}
+]
+},
+{
+"category": "Multifamily",
+"zones": [
+{
+"zd": "MF-1",
+"sqmi": 6.346
+},
+{
+"zd": "MF-2",
+"sqmi": 8.634
+},
+{
+"zd": "MF-3",
+"sqmi": 0.309
+},
+{
+"zd": "MF-4",
+"sqmi": 0.054
+}
+]
+},
+{
+"category": "Mixed-Use",
+"zones": [
+{
+"zd": "MU-1",
+"sqmi": 1.246
+},
+{
+"zd": "MU-2",
+"sqmi": 1.668
+},
+{
+"zd": "MU-3",
+"sqmi": 5.646
+},
+{
+"zd": "UC-2",
+"sqmi": 0.022
+},
+{
+"zd": "WMU-3",
+"sqmi": 0.096
+},
+{
+"zd": "WMU-5",
+"sqmi": 0.126
+},
+{
+"zd": "WMU-8",
+"sqmi": 0.014
+}
+]
+},
+{
+"category": "Commercial",
+"zones": [
+{
+"zd": "CR",
+"sqmi": 7.586
+},
+{
+"zd": "CS",
+"sqmi": 6.558
+},
+{
+"zd": "GO",
+"sqmi": 0.252
+},
+{
+"zd": "GR",
+"sqmi": 0.002
+},
+{
+"zd": "LO-1",
+"sqmi": 0.298
+},
+{
+"zd": "LO-2",
+"sqmi": 0.139
+},
+{
+"zd": "LO-3",
+"sqmi": 0.175
+},
+{
+"zd": "MC-1",
+"sqmi": 0.299
+},
+{
+"zd": "MC-2",
+"sqmi": 0.008
+},
+{
+"zd": "MC-3",
+"sqmi": 0.12
+},
+{
+"zd": "MC-4",
+"sqmi": 0.071
+},
+{
+"zd": "MO-1",
+"sqmi": 0.011
+},
+{
+"zd": "MO-2",
+"sqmi": 0.006
+},
+{
+"zd": "NO",
+"sqmi": 0.717
+},
+{
+"zd": "NS",
+"sqmi": 0.44
+},
+{
+"zd": "O-2",
+"sqmi": 0.002
+},
+{
+"zd": "RR",
+"sqmi": 5.086
+}
+]
+},
+{
+"category": "Industrial",
+"zones": [
+{
+"zd": "IM",
+"sqmi": 11.311
+},
+{
+"zd": "IR",
+"sqmi": 33.803
+},
+{
+"zd": "LI",
+"sqmi": 4.558
+}
+]
+},
+{
+"category": "Community Area",
+"zones": [
+{
+"zd": "CA-1",
+"sqmi": 1.073
+},
+{
+"zd": "CA-2",
+"sqmi": 0.046
+}
+]
+},
+{
+"category": "Planned Development",
+"zones": [
+{
+"zd": "PD",
+"sqmi": 68.612
+}
+]
+},
+{
+"category": "Conservation District",
+"zones": [
+{
+"zd": "CD",
+"sqmi": 3.091
+}
+]
+},
+{
+"category": "Other",
+"zones": [
+{
+"zd": "P",
+"sqmi": 0.084
+},
+{
+"zd": "PFD",
+"sqmi": 0.005
+},
+{
+"zd": "WR-3",
+"sqmi": 0.002
+},
+{
+"zd": "WR-5",
+"sqmi": 0.03
+},
+{
+"zd": "WR-20",
+"sqmi": 0.013
+}
+]
+}
+]
+}

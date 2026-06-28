@@ -330,6 +330,46 @@ html, body {
 .grouped-controls-stacked .control-row-label:first-child { margin-top: 0; }
 .grouped-controls-stacked .dual-slider-block { width: 100%; }
 
+/* Base-zoning collapsible district picker (category headers -> district checkboxes) */
+.zone-menu { width: 100%; display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow-y: auto; }
+.zone-actions { display: flex; align-items: center; gap: 7px; padding: 1px 2px 5px; }
+.zone-act { background: none; border: none; padding: 0; font: inherit; font-size: 11px; color: #4A90A4; cursor: pointer; text-decoration: underline; }
+.zone-act:hover { color: #2F6678; }
+.zone-act-sep { color: #CCC; }
+.zone-cat { width: 100%; }
+.zone-cat-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 5px; border-radius: 3px;
+  background: #EDEDED; font-size: 12px; cursor: pointer; user-select: none;
+}
+.zone-cat-head:hover { background: #E0E0E0; }
+.zone-caret { width: 13px; font-size: 12px; line-height: 1; color: #4A90A4; flex: 0 0 auto; text-align: center; }
+.zone-cat-all { margin: 0; flex: 0 0 auto; }
+.zone-sw { width: 11px; height: 11px; border-radius: 2px; flex: 0 0 auto; border: 1px solid rgba(0,0,0,.18); }
+.zone-cat-name { flex: 1 1 auto; font-weight: 600; }
+.zone-cat-count { color: #888; font-size: 11px; flex: 0 0 auto; }
+.zone-cat-list { display: none; padding: 2px 0 5px 28px; }
+.zone-cat.open .zone-cat-list { display: block; }
+.zone-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px; cursor: pointer; }
+.zone-item input { margin: 0; flex: 0 0 auto; }
+.zone-text { flex: 1 1 auto; }
+.zone-area { color: #A0A0A0; font-size: 11px; }
+
+/* Copy-link-to-view button (sidebar header) */
+#copy-view-link {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  color: #2F6678;
+  background: #EAF2F4;
+  border: 1px solid #B9D4DA;
+  border-radius: 4px;
+}
+#copy-view-link:hover { background: #DCEAEE; }
+
 /* Reports section button */
 .report-button {
   width: 100%;

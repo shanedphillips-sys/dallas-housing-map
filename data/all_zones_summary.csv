@@ -1,0 +1,56 @@
+category,zone,parcels,land_sqmi,total_units,total_mf_units,mf_units_2010plus
+Planned Development,PD,52917,68.61,216592,125834,52146
+Single-Family,R-5,20023,10.99,17079,136,0
+Single-Family,R-7.5,138479,96.61,129700,1304,2
+Single-Family,R-10,16609,16.97,14669,0,0
+Single-Family,R-13,651,0.55,645,0,0
+Single-Family,R-16,8868,8.54,8593,0,0
+Single-Family,R-1/2ac,1394,2.98,1208,6,0
+Single-Family,R-1ac,1739,7.63,1469,0,0
+Single-Family,A,1193,58.17,833,0,0
+Single-Family,D,4390,1.91,5319,4194,335
+Single-Family,MH,373,0.91,2556,0,0
+Multifamily,MF-1,1447,6.35,41293,39827,1495
+Multifamily,MF-2,5350,8.63,67057,62203,3016
+Multifamily,MF-3,43,0.31,5679,5212,635
+Multifamily,MF-4,5,0.05,908,908,0
+Townhouse / Cluster,TH-1,2210,0.89,1515,58,2
+Townhouse / Cluster,TH-2,4925,2.1,4392,568,6
+Townhouse / Cluster,TH-3,5785,2.33,5809,1871,198
+Townhouse / Cluster,CH,143,0.37,880,799,5
+Mixed-Use,MU-1,466,1.25,4029,2069,840
+Mixed-Use,MU-2,262,1.67,10960,7778,1371
+Mixed-Use,MU-3,1034,5.65,26470,6338,1097
+Mixed-Use,CA-1,586,1.07,9402,2637,1185
+Mixed-Use,CA-2,31,0.05,1609,0,0
+Mixed-Use,UC-2,0,0.02,0,0,0
+Mixed-Use,WMU-3,228,0.1,43,0,0
+Mixed-Use,WMU-5,23,0.13,0,0,0
+Mixed-Use,WMU-8,2,0.01,560,560,560
+Commercial,CR,4189,7.59,10062,4101,0
+Commercial,CS,2182,6.56,5159,318,0
+Commercial,RR,1241,5.09,7468,383,0
+Commercial,NO,211,0.72,29,0,0
+Commercial,NS,310,0.44,143,74,0
+Commercial,MC-1,80,0.3,1033,108,0
+Commercial,LO-1,98,0.3,347,319,0
+Commercial,GO,61,0.25,952,90,0
+Commercial,LO-3,37,0.17,135,71,0
+Commercial,LO-2,22,0.14,0,0,0
+Commercial,MC-3,32,0.12,602,0,0
+Commercial,MC-4,22,0.07,11,0,0
+Commercial,MO-1,5,0.01,0,0,0
+Commercial,MC-2,2,0.01,125,0,0
+Commercial,MO-2,3,0.01,0,0,0
+Commercial,GR,1,0.0,0,0,0
+Commercial,O-2,2,0.0,0,0,0
+Industrial,IR,6725,33.8,19255,399,0
+Industrial,IM,1127,11.31,2587,2,0
+Industrial,LI,895,4.56,2769,160,0
+Conservation District,CD,6541,3.09,6967,901,24
+Other,P,88,0.08,3,1,0
+Other,WR-5,6,0.03,913,665,665
+Other,WR-20,1,0.01,232,232,0
+Other,PFD,1,0.01,183,183,183
+Other,WR-3,7,0.0,2,0,0
+(all zones),TOTAL,293065,379.52,638246,270309,63765

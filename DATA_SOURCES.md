@@ -28,6 +28,7 @@ Raw source files marked *(OneDrive)* live under
 | Alleys | OSM `service=alley` | Pull alleys, clip to city | `build_alleys.py` → `data/alleys_dallas.geojson` |
 | Surface parking | OSM `amenity=parking` | Surface + untagged polygons (excludes multi-storey/underground/carport); centroid-in-city | `build_parking.py` → `data/parking_dallas.geojson` |
 | Street pattern (dendricity / dead-end share / intersection density) | OSM via OSMnx | Per-tract connectivity metrics (length-weighted bridge share, cul-de-sac node %, intersections/mi²) | `build_street_dendricity.py` → `data/street_dendricity_tracts.geojson` |
+| Water mask (internal, not a toggle) | OSM `natural=water` | Lakes + river clipped to city; auto-masks water on the zoning / land-use / FAR / decade fills so it doesn't read as a category | `build_water.py` → `data/water_dallas.geojson` |
 
 ## Buildings
 
@@ -47,7 +48,7 @@ Pipeline: `build_parcels_geojson.py` → `merge_collin_cad.py` → `merge_denton
 | Layer | Field / source | Method |
 |---|---|---|
 | Assessor parcels | full DCAD/CCAD/Denton attributes | Popup only; neutral fill |
-| Base zoning | City of Dallas Base_Zoning *(OneDrive)* | `data/zoning.geojson`; `zone_dist` → category |
+| Base zoning | City of Dallas Base_Zoning *(OneDrive)* | `data/zoning.geojson`; colored by `category`; collapsible per-category picker filters to individual base districts (`zone_norm`; (A)/(SAH) parentheticals merged) (catalog: `build_zoning_districts.py` → `data/zoning_districts.json`) |
 | Land use | CAD SPTD land-use code | Collapsed to ~17 display categories; `totexempt=='X'` reclassified Institutional |
 | Building floor-area ratio (FAR) | CAD `building_sf` ÷ lot area | Footprint-attributed FAR (`foot_far`): building floor area split across overlapping footprints; `build_footprint_far.py` |
 | Decade structure built | CAD `year_built` | Binned by decade |

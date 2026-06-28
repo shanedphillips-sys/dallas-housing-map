@@ -1,0 +1,59 @@
+<svg width="100%" viewBox="0 0 424 551.4" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Parcel building envelopes</title>
+  <desc>Parcels with 15 foot setbacks on all four sides: a 110 by 65 foot lot with a 80 by 35 foot envelope; a 90 by 40 foot lot with a 60 by 10 foot envelope.</desc>
+  <defs>
+  <marker id="ar" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto"><path d="M1,1.5 L5,4.5 L1,7.5" fill="none" stroke="#6b6b6b" stroke-width="1"/></marker>
+  </defs>
+  <style>
+    .t  { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 17px; fill: #1a1a1a; }
+    .ts { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; fill: #6b6b6b; }
+    .parcel { fill: #ffffff; stroke: #555555; }
+    .env    { fill: #cfe2f3; stroke: #2b6cb0; }
+    @media (prefers-color-scheme: dark) {
+      .t  { fill: #ededed; }
+      .ts { fill: #b0b0b0; }
+      .parcel { fill: #2a2a2a; stroke: #888888; }
+      .env    { fill: #243b53; stroke: #63a4e0; }
+    }
+  </style>
+
+  <rect class="parcel" x="64" y="62" width="330" height="195" rx="2" stroke-width="1.5"/>
+  <rect class="env" x="109" y="107" width="240" height="105" rx="2" stroke-width="1" stroke-dasharray="5 4"/>
+  <text class="t" x="229" y="144.5" text-anchor="middle" font-weight="500">Buildable envelope</text>
+  <text class="ts" x="229" y="164.5" text-anchor="middle">80' &#215; 35'</text>
+  <text class="ts" x="229" y="184.5" text-anchor="middle">2,800 sq ft</text>
+  <text class="t" x="229" y="277" text-anchor="middle">7,150 sq ft</text>
+  <line x1="64" y1="51" x2="394" y2="51" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)" marker-start="url(#ar)"/>
+  <text class="ts" x="229" y="41" text-anchor="middle">110'</text>
+  <line x1="52.5" y1="62" x2="52.5" y2="257" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)" marker-start="url(#ar)"/>
+  <text class="ts" x="36.5" y="159.5" text-anchor="middle" transform="rotate(-90 36.5 159.5)">65'</text>
+  <line x1="229" y1="63" x2="229" y2="107" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="239" y="89.5" text-anchor="start">15'</text>
+  <line x1="229" y1="256" x2="229" y2="212" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="239" y="239.5" text-anchor="start">15'</text>
+  <line x1="65" y1="159.5" x2="109" y2="159.5" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="86.5" y="151.5" text-anchor="middle">15'</text>
+  <line x1="393" y1="159.5" x2="349" y2="159.5" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="371.5" y="151.5" text-anchor="middle">15'</text>
+  <rect class="parcel" x="64" y="329.4" width="270" height="120" rx="2" stroke-width="1.5"/>
+  <rect class="env" x="109" y="374.4" width="180" height="30" rx="2" stroke-width="1" stroke-dasharray="5 4"/>
+  <text class="ts" x="199" y="394.4" text-anchor="middle">600 sq ft</text>
+  <text class="t" x="199" y="469.4" text-anchor="middle">3,600 sq ft</text>
+  <line x1="64" y1="318.4" x2="334" y2="318.4" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)" marker-start="url(#ar)"/>
+  <text class="ts" x="199" y="308.4" text-anchor="middle">90'</text>
+  <line x1="52.5" y1="329.4" x2="52.5" y2="449.4" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)" marker-start="url(#ar)"/>
+  <text class="ts" x="36.5" y="389.4" text-anchor="middle" transform="rotate(-90 36.5 389.4)">40'</text>
+  <line x1="199" y1="330.4" x2="199" y2="374.4" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="209" y="356.9" text-anchor="start">15'</text>
+  <line x1="199" y1="448.4" x2="199" y2="404.4" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="209" y="431.9" text-anchor="start">15'</text>
+  <line x1="65" y1="389.4" x2="109" y2="389.4" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="86.5" y="381.4" text-anchor="middle">15'</text>
+  <line x1="333" y1="389.4" x2="289" y2="389.4" stroke="#6b6b6b" stroke-width="1" marker-end="url(#ar)"/>
+  <text class="ts" x="311.5" y="381.4" text-anchor="middle">15'</text>
+
+  <rect class="parcel" x="64" y="487.4" width="34" height="18" rx="2" stroke-width="1.5"/>
+  <text class="ts" x="108" y="500.4" text-anchor="start">Property line</text>
+  <rect class="env" x="64" y="513.4" width="34" height="18" rx="2" stroke-width="1" stroke-dasharray="5 4"/>
+  <text class="ts" x="108" y="526.4" text-anchor="start">Buildable envelope with 15' setbacks</text>
+</svg>

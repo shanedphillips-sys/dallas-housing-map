@@ -15,6 +15,7 @@
       <header>
         <h1>Dallas Housing &amp; Land Use</h1>
         <p class="subtitle">Toggle layers to overlay on the city.</p>
+        <button id="copy-view-link" type="button" title="Copy a shareable link that reopens this exact view">🔗 Copy link to this view</button>
       </header>
 
       <section class="basemap-group">
@@ -155,9 +156,7 @@
               <span>Base zoning</span>
             </label>
             <div class="grouped-controls grouped-controls-stacked">
-              <label class="radio-option" style="width:100%"><input type="radio" name="zoning_mode" value="category" checked /><span>By category</span></label>
-              <label class="radio-option" style="width:100%"><input type="radio" name="zoning_mode" value="sf" /><span>Single-family only</span></label>
-              <label class="radio-option" style="width:100%"><input type="radio" name="zoning_mode" value="all" /><span>Every zone</span></label>
+              <div id="zoning-zone-menu" class="zone-menu"></div>
             </div>
           </div>
 

@@ -1,0 +1,61 @@
+zone_dist,category,polygons,acres,sq_mi,pct
+R-7.5(A),Single-Family,165,61828.5,96.61,25.46
+PD,Planned Development,997,43911.4,68.61,18.08
+A(A),Single-Family,76,37226.1,58.17,15.33
+IR,Industrial,75,21633.8,33.8,8.91
+R-10(A),Single-Family,75,10863.6,16.97,4.47
+IM,Industrial,104,7238.9,11.31,2.98
+R-5(A),Single-Family,70,7033.5,10.99,2.9
+MF-2(A),Multifamily,251,5466.6,8.54,2.25
+R-16(A),Single-Family,25,5466.0,8.54,2.25
+R-1ac(A),Single-Family,15,4882.7,7.63,2.01
+CR,Commercial,404,4855.2,7.59,2.0
+CS,Commercial,181,4197.1,6.56,1.73
+MF-1(A),Multifamily,138,3976.6,6.21,1.64
+MU-3,Mixed-Use,55,3506.2,5.48,1.44
+RR,Commercial,120,3254.8,5.09,1.34
+LI,Industrial,57,2917.1,4.56,1.2
+CD,Conservation District,18,1978.1,3.09,0.81
+R-1/2ac(A),Single-Family,24,1905.8,2.98,0.78
+TH-3(A),Townhouse / Cluster,112,1491.8,2.33,0.61
+TH-2(A),Townhouse / Cluster,61,1341.2,2.1,0.55
+D(A),Single-Family,95,1225.6,1.91,0.5
+MU-2,Mixed-Use,47,1020.1,1.59,0.42
+MU-1,Mixed-Use,79,788.1,1.23,0.32
+CA-1(A),Community Area,1,686.7,1.07,0.28
+MH(A),Single-Family,15,581.3,0.91,0.24
+TH-1(A),Townhouse / Cluster,33,569.4,0.89,0.23
+NO(A),Commercial,84,458.6,0.72,0.19
+R-13(A),Single-Family,5,352.5,0.55,0.15
+NS(A),Commercial,129,281.7,0.44,0.12
+CH,Townhouse / Cluster,14,234.9,0.37,0.1
+MF-3(A),Multifamily,21,197.6,0.31,0.08
+MC-1,Commercial,19,191.6,0.3,0.08
+LO-1,Commercial,54,190.9,0.3,0.08
+GO(A),Commercial,25,161.3,0.25,0.07
+LO-3,Commercial,15,111.9,0.17,0.05
+MU-3(SAH),Mixed-Use,7,107.0,0.17,0.04
+LO-2,Commercial,5,88.7,0.14,0.04
+MF-1(A)(SAH),Multifamily,4,84.9,0.13,0.03
+WMU-5,Mixed-Use,4,80.3,0.13,0.03
+MC-3,Commercial,11,76.7,0.12,0.03
+WMU-3,Mixed-Use,2,61.4,0.1,0.03
+MF-2(A)(SAH),Multifamily,5,57.4,0.09,0.02
+P(A),Other,66,53.7,0.08,0.02
+MU-2(SAH),Mixed-Use,4,47.7,0.07,0.02
+MC-4,Commercial,9,45.2,0.07,0.02
+MF-4(A),Multifamily,4,34.3,0.05,0.01
+CA-2(A),Community Area,1,29.7,0.05,0.01
+WR-5,Other,4,19.1,0.03,0.01
+UC-2,Mixed-Use,1,14.2,0.02,0.01
+WMU-8,Mixed-Use,2,9.1,0.01,0.0
+MU-1(SAH),Mixed-Use,3,9.1,0.01,0.0
+WR-20,Other,1,8.3,0.01,0.0
+MO-1,Commercial,4,7.4,0.01,0.0
+MC-2,Commercial,2,5.0,0.01,0.0
+MO-2,Commercial,1,4.1,0.01,0.0
+PFD,Other,1,3.5,0.01,0.0
+MF-2,Multifamily,1,1.7,0.0,0.0
+WR-3,Other,2,1.5,0.0,0.0
+GR,Commercial,1,1.5,0.0,0.0
+O-2,Commercial,1,1.2,0.0,0.0

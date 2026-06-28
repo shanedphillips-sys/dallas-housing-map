@@ -5,7 +5,7 @@ Styled after generate_zoning_map_north_up.py / make_report_map_value.py:
   - north-up / true proportions (EPSG:2276), equal aspect
   - same clipped city boundary (black 0.5 pt) with the Lake Ray Hubbard exclave AND
     the severed corridor stub trimmed off
-  - tan (#DDD5CA) surround, near-white (#F7F6F3) city interior
+  - tan (#DDD5CA) surround, light-gray (#E8E8E8) basemap interior, white roads & water
   - 14x16" canvas at 600 DPI with the legend/frame scaled up (~1.94x) so they read
     the same when the image is placed at ~6.5" wide on a letter page
   - thin medium-light-gray frame
@@ -13,7 +13,8 @@ Styled after generate_zoning_map_north_up.py / make_report_map_value.py:
 Legend per spec: title "Land value per acre"; everything LEFT-aligned (title +
 entries); NO italics (text.parse_math disabled so the "$" in labels render as plain
 text, not math mode); each range "$X – $Y" carries a "$" on both numbers and an en
-dash with a space on each side; low bucket is "< $100k".
+dash with a space on each side. The "< $100k" bucket is dropped; unmapped land
+(incl. < $100k, roads, water) shows the gray basemap.
 
 Output: report_map_land_value.png (repo) + a copy in the GDPC report-charts folder.
 """
@@ -25,6 +26,7 @@ import numpy as np
 import pandas as pd
 import pyogrio
 import shapely
+import osmnx as ox
 import matplotlib
 matplotlib.use("Agg")
 # Render "$" in legend labels as a literal dollar sign rather than entering mathtext
@@ -42,7 +44,7 @@ PROJ = "EPSG:2276"
 DPI = 600
 FIG_W, FIG_H = 14, 16
 OUTSIDE   = "#DDD5CA"      # surround (north_up style)
-CITY_FILL = "#F7F6F3"      # near-white city interior (= "< $100k" / no-parcel areas)
+CITY_FILL = "#E8E8E8"      # light-gray basemap for unmapped areas (< $100k / no parcel); matches the PD/zoning maps
 BOUNDARY  = "#000000"
 BOUNDARY_LW = 0.5
 FRAME_GRAY = "#BBBBBB"
@@ -95,6 +97,21 @@ parcels = parcels[parcels.geometry.centroid.within(city_geom)].copy()
 parcels["geometry"] = parcels.geometry.simplify(15)   # ~sub-pixel at this scale; speeds rendering
 parcels["color"] = parcels["lpa"].apply(bin_color)
 
+# ---- Water bodies (drawn white, like the report's other maps) so lakes & the river
+#      don't read as a land-value bin (data/water_dallas.geojson = OSM natural=water) ----
+water = gpd.read_file(os.path.join(DATA, "water_dallas.geojson")).to_crs(PROJ)
+water["geometry"] = water.geometry.apply(shapely.make_valid)
+water = gpd.clip(water, city)
+
+# ---- Highways (OSM motorway/trunk) drawn white, like the PD/zoning maps' basemap ----
+roads = ox.features_from_place("Dallas, Texas, USA",
+    tags={"highway": ["motorway", "motorway_link", "trunk", "trunk_link"]})
+roads = roads[roads.geometry.geom_type.isin(["LineString", "MultiLineString"])]
+roads = gpd.GeoDataFrame(roads[["highway", "geometry"]], geometry="geometry",
+                         crs="EPSG:4326").to_crs(PROJ)
+hw_main  = gpd.clip(roads[roads["highway"].isin(["motorway", "trunk"])], city)
+hw_links = gpd.clip(roads[roads["highway"].isin(["motorway_link", "trunk_link"])], city)
+
 # ---- Extent (north_up: fixed 14x16 canvas, 0.6" surround pad) ----
 minx, miny, maxx, maxy = city.total_bounds
 pad_x = 0.6 * ((maxx - minx) / FIG_W)
@@ -112,12 +129,17 @@ ax.set_aspect("equal")
 city.plot(ax=ax, color=CITY_FILL, edgecolor="none", zorder=1)
 for c in parcels["color"].unique():
     parcels[parcels["color"] == c].plot(ax=ax, color=c, edgecolor="none", zorder=2)
+# Bodies of water — white; masks any parcel that covers a lake or the river
+if len(water):
+    water.plot(ax=ax, color="white", edgecolor="none", zorder=3)
+# Highways — white, on top of water so bridge crossings stay continuous
+hw_links.plot(ax=ax, color="white", linewidth=0.7, alpha=0.8, zorder=4)
+hw_main.plot(ax=ax, color="white", linewidth=2.0, alpha=0.9, zorder=4)
 city.boundary.plot(ax=ax, color=BOUNDARY, linewidth=BOUNDARY_LW, zorder=6)
 
 # ---- Legend (scaled like north_up: ~16.7 pt entries on the 14" canvas) ----
-handles = [mpatches.Patch(facecolor=CITY_FILL, edgecolor="#888888", linewidth=0.7, label="< $100k")]
-for _, color, lbl in VALUE_BINS:
-    handles.append(mpatches.Patch(facecolor=color, edgecolor="none", label=lbl))
+handles = [mpatches.Patch(facecolor=color, edgecolor="none", label=lbl)
+           for _, color, lbl in VALUE_BINS]
 leg = ax.legend(handles=handles, loc="upper right", fontsize=16.7, title="Land value per acre",
                 title_fontsize=17.5, frameon=True, fancybox=False, edgecolor="#BBBBBB",
                 facecolor="white", framealpha=1.0, borderpad=0.8, labelspacing=0.6, borderaxespad=0.6)
