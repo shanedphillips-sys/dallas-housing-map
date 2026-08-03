@@ -333,6 +333,127 @@ const LAND_USE_LABEL_BY_VALUE = Object.fromEntries(
   LAND_USE_DEFS.map((d) => [d.dataValue, d.label])
 );
 const VACANT_DATA_VALUES = LAND_USE_DEFS.filter((d) => d.vacant).map((d) => d.dataValue);
+const LAND_USE_COLOR_BY_VALUE = Object.fromEntries(LAND_USE_DEFS.map((d) => [d.dataValue, d.color]));
+
+// ---- Land-use picker (mirrors the base-zoning district menu) ----------------
+// Collapsible families -> land_use_cat values. The layer is filtered to the
+// checked values exactly like the zoning layer is filtered to zone_norm.
+const LAND_USE_GROUPS = [
+  { category: "Residential", color: "#C44E52", values: [
+    "Single Family", "Townhouses", "SFR Condominiums", "Duplexes",
+    "MF 3-4 Units", "MF 5-19 Units", "MF 20-49 Units", "MF 50+ Units",
+    "MF Apartments (Unclassified)", "Mobile Home"] },
+  { category: "Commercial & Industrial", color: "#4A90A4", values: ["Commercial", "Industrial"] },
+  { category: "Institutional / Government", color: "#37474F", values: ["Institutional"] },
+  { category: "Vacant", color: "#BCA88F", values: [
+    "Vacant - Single Family", "Vacant - Commercial", "Vacant - Industrial"] },
+  { category: "Open space & Other", color: "#7CB342", values: ["Open Space", "Other"] },
+];
+const luState = { selected: null, total: 0, built: false };   // selected=null => all shown
+
+function landUseFilter() {
+  if (!luState.selected || luState.selected.size >= luState.total) return null;
+  return ["in", ["get", "land_use_cat"], ["literal", [...luState.selected]]];
+}
+
+function applyLandUseSelection() {
+  if (LAYERS.land_use && LAYERS.land_use.enabled && map.getLayer("land-use-fill")) {
+    const f = landUseFilter();
+    map.setFilter("land-use-fill", f);       // null clears the filter (show all)
+    map.setFilter("land-use-outline", f);
+    const vac = ["in", ["get", "land_use_cat"], ["literal", VACANT_DATA_VALUES]];
+    map.setFilter("land-use-vacant-pattern", f ? ["all", vac, f] : vac);
+  }
+  refreshLegend();
+}
+
+function recomputeLandUseSelection() {
+  const checked = [...document.querySelectorAll("#land-use-menu .zone-cb:checked")].map((b) => b.dataset.lu);
+  luState.selected = checked.length === luState.total ? null : new Set(checked);
+  applyLandUseSelection();
+}
+
+function syncLuCatAll(catEl) {
+  const all = catEl.querySelector(".zone-cat-all");
+  const boxes = [...catEl.querySelectorAll(".zone-cb")];
+  const on = boxes.filter((b) => b.checked).length;
+  all.checked = on === boxes.length;
+  all.indeterminate = on > 0 && on < boxes.length;
+}
+
+function buildLandUseLegend() {
+  const filtered = luState.selected && luState.selected.size < luState.total;
+  const defs = filtered ? LAND_USE_DEFS.filter((d) => luState.selected.has(d.dataValue)) : LAND_USE_DEFS;
+  const rows = defs.map((d) => {
+    if (d.vacant) {
+      return `<div class="swatch-row"><span class="swatch" style="background:` +
+        `repeating-linear-gradient(45deg, #1A1A1A 0 0.7px, transparent 0.7px 5px), ${d.color}"></span>${d.label}</div>`;
+    }
+    return `<div class="swatch-row"><span class="swatch" style="background:${d.color}"></span>${d.label}</div>`;
+  }).join("");
+  const sub = filtered
+    ? `<div class="muted" style="margin:-2px 0 5px 0">${luState.selected.size} of ${luState.total} land uses shown</div>`
+    : "";
+  return `<div class="legend-block"><h3>Land Use</h3>${sub}${rows || '<div class="muted">No land uses selected</div>'}</div>`;
+}
+
+// Build the collapsible family -> land-use checkbox menu under "Land use".
+function initLandUseMenu() {
+  const host = document.getElementById("land-use-menu");
+  if (!host) return;
+  luState.total = LAND_USE_GROUPS.reduce((n, g) => n + g.values.length, 0);
+  const actions = '<div class="zone-actions">' +
+    '<button type="button" class="zone-act" data-act="all">Select all</button>' +
+    '<span class="zone-act-sep">·</span>' +
+    '<button type="button" class="zone-act" data-act="none">Deselect all</button></div>';
+  host.innerHTML = actions + LAND_USE_GROUPS.map((g) => {
+    const items = g.values.map((v) =>
+      `<label class="zone-item"><input type="checkbox" class="zone-cb" data-lu="${v}" checked />` +
+      `<span class="zone-sw" style="background:${LAND_USE_COLOR_BY_VALUE[v]}"></span>` +
+      `<span class="zone-text">${LAND_USE_LABEL_BY_VALUE[v] || v}</span></label>`).join("");
+    return `<div class="zone-cat">
+      <div class="zone-cat-head">
+        <span class="zone-caret">▸</span>
+        <input type="checkbox" class="zone-cat-all" checked title="Toggle all ${g.category}" />
+        <span class="zone-sw" style="background:${g.color}"></span>
+        <span class="zone-cat-name">${g.category}</span>
+        <span class="zone-cat-count">${g.values.length}</span>
+      </div>
+      <div class="zone-cat-list">${items}</div>
+    </div>`;
+  }).join("");
+
+  host.querySelectorAll(".zone-cat-head").forEach((head) => {
+    head.addEventListener("click", (e) => {
+      if (e.target.classList.contains("zone-cat-all")) return;
+      const cat = head.parentElement;
+      cat.classList.toggle("open");
+      head.querySelector(".zone-caret").textContent = cat.classList.contains("open") ? "▾" : "▸";
+    });
+  });
+  host.querySelectorAll(".zone-cat-all").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      cb.closest(".zone-cat").querySelectorAll(".zone-cb").forEach((z) => { z.checked = cb.checked; });
+      cb.indeterminate = false;
+      recomputeLandUseSelection();
+    });
+  });
+  host.querySelectorAll(".zone-cb").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      syncLuCatAll(cb.closest(".zone-cat"));
+      recomputeLandUseSelection();
+    });
+  });
+  host.querySelectorAll(".zone-act").forEach((b) => {
+    b.addEventListener("click", () => {
+      const on = b.dataset.act === "all";
+      host.querySelectorAll(".zone-cb").forEach((z) => { z.checked = on; });
+      host.querySelectorAll(".zone-cat-all").forEach((c) => { c.checked = on; c.indeterminate = false; });
+      recomputeLandUseSelection();
+    });
+  });
+  luState.built = true;
+}
 
 // FAR palette (consistent with station_area_analysis.py)
 const FAR_BINS = [
@@ -802,9 +923,13 @@ const LAYERS = {
         ? LAND_USE_DEFS.find((d) => d.dataValue === "Other").color
         : "#C4BDB3");
 
+      // Respect the land-use picker selection at (re)add time.
+      const luF = landUseFilter();
+      const luVac = ["in", ["get", "land_use_cat"], ["literal", VACANT_DATA_VALUES]];
+
       // Base fill — every parcel colored by category (vacant uses the same
       // base color as its non-vacant counterpart).
-      map.addLayer({
+      const luFill = {
         id: "land-use-fill",
         type: "fill",
         source: "parcels-src",
@@ -812,57 +937,41 @@ const LAYERS = {
         minzoom: 11,
         paint: {
           "fill-color": colorExpr,
-          "fill-opacity": [
-            "interpolate", ["linear"], ["zoom"],
-            11, 0.6, 14, 0.85,
-          ],
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.6, 14, 0.85],
         },
-      }, beneathTopLayers());
+      };
+      if (luF) luFill.filter = luF;
+      map.addLayer(luFill, beneathTopLayers());
 
-      // Diagonal-stripe pattern overlay applied ONLY to vacant categories.
-      // The image has a transparent background, so the underlying base
-      // color shows through — no outer border, just the diagonals.
+      // Diagonal-stripe pattern overlay applied ONLY to vacant categories still
+      // selected. Transparent background lets the underlying base color show.
       map.addLayer({
         id: "land-use-vacant-pattern",
         type: "fill",
         source: "parcels-src",
         "source-layer": "parcels",
         minzoom: 11,
-        filter: ["in", ["get", "land_use_cat"],
-                 ["literal", VACANT_DATA_VALUES]],
+        filter: luF ? ["all", luVac, luF] : luVac,
         paint: {
           "fill-pattern": "diag-stripes",
-          "fill-opacity": [
-            "interpolate", ["linear"], ["zoom"],
-            11, 0.85, 14, 1.0,
-          ],
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.85, 14, 1.0],
         },
       }, beneathTopLayers());
 
-      map.addLayer({
+      const luOutline = {
         id: "land-use-outline",
         type: "line",
         source: "parcels-src",
         "source-layer": "parcels",
         minzoom: 14,
         paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
-      }, beneathTopLayers());
+      };
+      if (luF) luOutline.filter = luF;
+      map.addLayer(luOutline, beneathTopLayers());
     },
     popup: (props) => parcelPopup(props),
     clickLayer: "land-use-fill",
-    legend: () => {
-      const rows = LAND_USE_DEFS.map((d) => {
-        if (d.vacant) {
-          // Swatch: base color + diagonal-stripe overlay (matches the map pattern)
-          return `<div class="swatch-row">
-            <span class="swatch" style="background:
-              repeating-linear-gradient(45deg, #1A1A1A 0 0.7px, transparent 0.7px 5px),
-              ${d.color}"></span>${d.label}</div>`;
-        }
-        return `<div class="swatch-row"><span class="swatch" style="background:${d.color}"></span>${d.label}</div>`;
-      }).join("");
-      return `<div class="legend-block"><h3>Land Use</h3>${rows}</div>`;
-    },
+    legend: () => buildLandUseLegend(),
   },
 
   far_footprint: {
@@ -1884,6 +1993,7 @@ map.on("load", async () => {
   initGeocoder();
   injectTooltips();
   zoningMenuReady = initZoningMenu();
+  initLandUseMenu();
 
   // Legend collapse / expand
   const legendEl = document.getElementById("legend");
