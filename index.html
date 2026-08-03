@@ -16,6 +16,10 @@
         <h1>Dallas Housing &amp; Land Use</h1>
         <p class="subtitle">Toggle layers to overlay on the city.</p>
         <button id="copy-view-link" type="button" title="Copy a shareable link that reopens this exact view">🔗 Copy link to this view</button>
+        <div class="geocoder">
+          <input type="text" id="geocoder-input" placeholder="Search address or place…" autocomplete="off" spellcheck="false" />
+          <div id="geocoder-results" class="geocoder-results"></div>
+        </div>
       </header>
 
       <section class="basemap-group">
@@ -340,7 +344,83 @@
             </div>
           </div>
 
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer-group="demographics" />
+              <span>Demographics</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="income" checked /><span>Median income</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="renter_pct" /><span>Renter share</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="rent_burden_pct" /><span>Rent burden</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="poverty_pct" /><span>Poverty rate</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="hisp_pct" /><span>% Hispanic</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="white_pct" /><span>% NH White</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="black_pct" /><span>% Black</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="demographics_metric" value="asian_pct" /><span>% Asian</span></label>
+            </div>
+          </div>
+
+          <div class="layer-toggle">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="subsidized" />
+              <span>Subsidized (LIHTC) housing</span>
+            </label>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer-group="transit" />
+              <span>Transit network</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="transit_mode" value="frequent" checked /><span>Frequent only (≤20 min peak)</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="transit_mode" value="all" /><span>All routes</span></label>
+            </div>
+          </div>
+
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer-group="floodplain" />
+              <span>Floodplain (FEMA)</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="radio" name="floodplain_mode" value="both" checked /><span>Both</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="floodplain_mode" value="100" /><span>100-yr (1% annual)</span></label>
+              <label class="radio-option" style="width:100%"><input type="radio" name="floodplain_mode" value="500" /><span>500-yr (0.2% annual)</span></label>
+            </div>
+          </div>
+
         </div>
+      </section>
+
+      <section class="about-group">
+        <details id="about-panel">
+          <summary>About &amp; Sources</summary>
+          <div class="about-body">
+            <p>Interactive map of Dallas-area housing, zoning, land use, value, jobs, and
+              demographics, for the Greater Dallas Planning Council.</p>
+            <h4>Data sources</h4>
+            <ul class="source-list">
+              <li><b>Parcels, zoning, land use, value, FAR, decade built</b> — DCAD 2025 Certified + Collin &amp; Denton CAD (<a href="https://www.dallascad.org" target="_blank" rel="noopener">DCAD</a>)</li>
+              <li><b>Building permits (2000–2024)</b> — City of Dallas</li>
+              <li><b>Demographics, rent &amp; home-value change</b> — U.S. Census <a href="https://www.census.gov/programs-surveys/acs" target="_blank" rel="noopener">ACS 5-year</a> (+ Zillow ZHVI/ZORI)</li>
+              <li><b>Population / housing-unit change</b> — Census Decennial (2010, 2020)</li>
+              <li><b>Job density</b> — Census <a href="https://lehd.ces.census.gov/data/" target="_blank" rel="noopener">LODES</a> (2022)</li>
+              <li><b>Expected adult earnings</b> — <a href="https://opportunityinsights.org" target="_blank" rel="noopener">Opportunity Insights</a></li>
+              <li><b>Building footprints (3D)</b> — <a href="https://github.com/microsoft/GlobalMLBuildingFootprints" target="_blank" rel="noopener">Microsoft ML footprints</a> + OSM heights</li>
+              <li><b>Streets, alleys, parking, water</b> — <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a></li>
+              <li><b>Transit network</b> — <a href="https://www.dart.org" target="_blank" rel="noopener">DART</a> GTFS</li>
+              <li><b>Subsidized housing</b> — <a href="https://www.tdhca.texas.gov" target="_blank" rel="noopener">TDHCA</a> LIHTC inventory</li>
+              <li><b>Floodplain</b> — <a href="https://www.fema.gov/flood-maps" target="_blank" rel="noopener">FEMA</a> National Flood Hazard Layer</li>
+            </ul>
+            <p class="muted">Search © OpenStreetMap / Photon. Full per-layer methods are documented in DATA_SOURCES.md in the project repository.</p>
+          </div>
+        </details>
       </section>
 
       <section class="reports-group">
@@ -391,6 +471,7 @@
   </div>
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

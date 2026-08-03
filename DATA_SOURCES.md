@@ -18,6 +18,7 @@ Raw source files marked *(OneDrive)* live under
 | Council districts | City of Dallas Council_Boundaries *(OneDrive)* | As provided | `data/council.geojson` |
 | Rail stations | DART Rail_Stops *(OneDrive)* | As provided | `data/rail_stops.geojson` |
 | Half-mile station areas | DART rail stops | 0.5-mi (2,640 ft) buffers around station points | `data/station_areas.geojson` |
+| Transit network (DART) | DART GTFS feed | Weekday routes; **frequent** = ≤20-min headway in *both* 7–9am & 4–6pm peaks (rail service resolved via `calendar_dates`); rail drawn with cross-ties, bus in 3 headway tiers | `build_frequent_transit.py` → `data/transit_routes.geojson` |
 
 ## Streets, alleys & parking (OpenStreetMap)
 
@@ -34,11 +35,14 @@ Raw source files marked *(OneDrive)* live under
 
 | Layer | Source | Method | Build script → data |
 |---|---|---|---|
-| Building footprints (3D) | Microsoft GlobalMLBuildingFootprints + OSM | MS ML footprints (centroid-in-city) + `meanHeight`; OSM `height`/`building:levels` overlaid for the towers MS leaves blank; 6 m default | `build_buildings.py` → `data/buildings_dallas.geojson` (`height_m`, `src`) |
+| Building footprints (3D) | Microsoft GlobalMLBuildingFootprints + OSM | MS ML footprints (centroid-in-city) + `meanHeight`; OSM `height`/`building:levels` overlaid for the towers MS leaves blank; 6 m default | `build_buildings.py` → `data/buildings_dallas.geojson` (`height_m`, `src`) → `data/buildings.pmtiles` (`build_pmtiles.py`, source-layer `buildings`) |
 
 ## Parcels & parcel attributes
 
-All parcel layers read the same `data/parcels_{nw,ne,sw,se}.geojson`.
+All parcel layers share one vector-tile source **`data/parcels.pmtiles`** (source-layer
+`parcels`), built from `data/parcels_{nw,ne,sw,se}.geojson` by `build_pmtiles.py` (pyogrio /
+GDAL PMTiles driver — the browser streams only visible tiles instead of loading ~215 MB of
+GeoJSON up front). The quadrant GeoJSONs remain the editable source of truth.
 
 **Parcel base:** DCAD 2025 Certified (Dallas Co.) + Collin CAD + Denton CAD, account-level merge.
 Pipeline: `build_parcels_geojson.py` → `merge_collin_cad.py` → `merge_denton_cad.py`
@@ -65,12 +69,26 @@ Pipeline: `build_parcels_geojson.py` → `merge_collin_cad.py` → `merge_denton
 
 | Layer | Source | Method | Build script → data |
 |---|---|---|---|
+| Demographics (income, renter %, rent burden, poverty, race/ethnicity) | Census ACS 2020–24 5-yr | `B19013` income, `B25003` tenure, `B25070` rent burden, `B17001` poverty, `B03002` race → % Hispanic / NH White / Black / Asian; by tract, single toggle + metric radio | `build_acs_demographics.py` → `data/acs_demographics_tracts.geojson` |
 | Population change 2010–2020 (BG / tract) | Census Decennial (2020 DHC; 2010 blocks) | 2020 pop at BG; 2010 pulled at BLOCK level, area-weighted to 2020 BGs via TAB2010/2020 block relationship | `build_pop_hu_geojsons.py` → `data/block_groups.geojson`, `data/tracts.geojson` |
 | Housing-unit change 2010–2020 (BG / tract) | Census Decennial | Same block-level crosswalk as pop | (same files) |
 | Job density | LODES8 WAC 2022 | Workplace jobs/acre by tract; 3 BLS sector-weighted wage bins | `build_jobs_tracts.py` → `data/jobs_tracts.geojson` |
 | Expected adult earnings | Opportunity Insights (Opportunity Atlas) | Predicted adult income, children from 25th-pct families; 2010→2020 tract crosswalk | `build_oi_tracts.py` → `data/oi_tracts.geojson` |
 | Median rent change | ACS 5-yr `B25064` (tract) ↔ Zillow ZORI (ZIP) | Real (CPI-deflated 2024$); MOE/est > 30% grayed; dual-year slider | `build_acs_rent_value.py`, `build_zillow_zip.py`, `build_cpi.py` |
 | Median home value change | ACS 5-yr `B25077` (tract) ↔ Zillow ZHVI (ZIP) | Real 2024$; same MOE filter; Zillow late-start ZIPs cross-hatched | (same scripts) |
+
+## Subsidized housing & hazards
+
+| Layer | Source | Method | Build script → data |
+|---|---|---|---|
+| Subsidized (LIHTC) housing | TDHCA HTC Property Inventory (May 2026) | Tax-credit properties; dedup by lat/lon (keep max Total Units); clip to city; circle area ∝ unit count | `build_subsidized_housing.py` → `data/subsidized_housing.geojson` |
+| Floodplain (100-yr / 500-yr) | FEMA National Flood Hazard Layer | 1%-annual SFHA (`A*`/`V*`) vs 0.2%-annual zones; grid-tiled ArcGIS fetch (10k-record cap), dedup by OBJECTID, clip to city; gray cross-hatch fills (100-yr thicker) | `build_floodplain.py` → `data/floodplain.geojson` |
+
+## Place search
+
+| Feature | Source | Method |
+|---|---|---|
+| Address / place geocoder | Photon (OpenStreetMap) | Header search box; autocomplete biased to the Dallas area; flies to the picked result | (client-side, no data file) |
 
 ## Reports (side panel)
 

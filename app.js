@@ -67,6 +67,12 @@ function buildInitialStyle() {
   };
 }
 
+// Register the PMTiles protocol so vector sources can stream .pmtiles archives
+// (parcels + buildings are served as vector tiles instead of giant GeoJSON).
+if (typeof pmtiles !== "undefined") {
+  maplibregl.addProtocol("pmtiles", new pmtiles.Protocol().tile);
+}
+
 const map = new maplibregl.Map({
   container: "map",
   style: buildInitialStyle(),
@@ -470,10 +476,7 @@ function makeValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACRE_
     sourceFile: null,
     layerIds: [lowLayerId, fillLayerId],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
     },
     addLayers: () => {
       // Low-value parcels: rendered as a flat 2D fill at 1% opacity. We use
@@ -484,6 +487,7 @@ function makeValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACRE_
         id: lowLayerId,
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         filter: ["all",
           ["<", ["coalesce", ["get", propName], 0], LOW_VALUE_THRESHOLD],
@@ -500,6 +504,7 @@ function makeValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACRE_
         id: fillLayerId,
         type: "fill-extrusion",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         filter: ["all",
           [">=", ["coalesce", ["get", propName], 0], LOW_VALUE_THRESHOLD],
@@ -524,6 +529,7 @@ function makeValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACRE_
         ${lowRow}
         ${rows}
         <div class="muted" style="margin-top:4px">Height: 1 m per $25k/acre${valueCapEnabled ? ", capped at $100M/acre (4,000 m)" : " (uncapped)"}. Right-drag or shift-drag to tilt for 3D.</div>
+        <div class="muted legend-vintage">DCAD 2025 Certified</div>
       </div>`;
     },
   };
@@ -541,16 +547,14 @@ function make2DValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACR
     sourceFile: null,
     layerIds: [fillId],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
     },
     addLayers: () => {
       map.addLayer({
         id: fillId,
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         filter: ["all",
           [">=", ["coalesce", ["get", propName], 0], LOW_VALUE_THRESHOLD],
@@ -567,7 +571,7 @@ function make2DValuePerAcreLayer(layerKey, propName, label, bins = VALUE_PER_ACR
       const rows = bins.map((b) =>
         `<div class="swatch-row"><span class="swatch" style="background:${b.color}"></span>${b.label}</div>`).join("");
       const lowRow = `<div class="swatch-row"><span class="swatch" style="background:transparent;border:1px solid #888"></span>&lt; $100k / acre</div>`;
-      return `<div class="legend-block"><h3>${label}</h3>${lowRow}${rows}</div>`;
+      return `<div class="legend-block"><h3>${label}</h3>${lowRow}${rows}<div class="muted legend-vintage">DCAD 2025 Certified</div></div>`;
     },
   };
 }
@@ -630,6 +634,15 @@ async function loadParcelsCombined() {
   parcelsCombined = { type: "FeatureCollection", features };
   console.log(`Loaded ${features.length.toLocaleString()} parcels.`);
   return parcelsCombined;
+}
+
+// Ensure the shared parcels VECTOR source (PMTiles) exists. Every parcel-based
+// layer (value 3D/2D, land use, FAR, decade, imp/land ratio, parcels) shares it.
+// loadParcelsCombined() above is retained as a GeoJSON fallback but no longer wired.
+async function ensureParcelsSource() {
+  if (!map.getSource("parcels-src")) {
+    map.addSource("parcels-src", { type: "vector", url: "pmtiles://data/parcels.pmtiles" });
+  }
 }
 
 
@@ -729,10 +742,7 @@ const LAYERS = {
     sourceFile: null, // loaded separately via loadParcelsCombined()
     layerIds: ["parcels-fill", "parcels-outline"],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
     },
     addLayers: () => {
       // Invisible fill — preserved so clicks still register on parcels
@@ -740,6 +750,7 @@ const LAYERS = {
         id: "parcels-fill",
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 12,
         paint: {
           "fill-color": "#D9CFC0",
@@ -750,6 +761,7 @@ const LAYERS = {
         id: "parcels-outline",
         type: "line",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 12,
         paint: {
           "line-color": "#5A5048",
@@ -778,10 +790,7 @@ const LAYERS = {
     sourceFile: null,
     layerIds: ["land-use-fill", "land-use-vacant-pattern", "land-use-outline"],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
       ensureDiagonalPatternImage();
     },
     addLayers: () => {
@@ -799,6 +808,7 @@ const LAYERS = {
         id: "land-use-fill",
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         paint: {
           "fill-color": colorExpr,
@@ -816,6 +826,7 @@ const LAYERS = {
         id: "land-use-vacant-pattern",
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         filter: ["in", ["get", "land_use_cat"],
                  ["literal", VACANT_DATA_VALUES]],
@@ -832,6 +843,7 @@ const LAYERS = {
         id: "land-use-outline",
         type: "line",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 14,
         paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
       }, beneathTopLayers());
@@ -860,10 +872,7 @@ const LAYERS = {
     sourceFile: null,
     layerIds: ["far-foot-fill", "far-foot-outline"],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
     },
     addLayers: () => {
       // Numeric step on foot_far, reusing the FAR palette. Each parcel's CAD floor
@@ -879,6 +888,7 @@ const LAYERS = {
         id: "far-foot-fill",
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         paint: {
           "fill-color": expr,
@@ -889,6 +899,7 @@ const LAYERS = {
         id: "far-foot-outline",
         type: "line",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 14,
         paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
       }, beneathTopLayers());
@@ -910,10 +921,7 @@ const LAYERS = {
     sourceFile: null,
     layerIds: ["decade-built-fill", "decade-built-outline"],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
     },
     addLayers: () => {
       // year_built < 1850 (includes the 0-coded "no data" bucket) → gray.
@@ -939,6 +947,7 @@ const LAYERS = {
         id: "decade-built-fill",
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         paint: {
           "fill-color": colorExpr,
@@ -952,6 +961,7 @@ const LAYERS = {
         id: "decade-built-outline",
         type: "line",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 14,
         paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
       }, beneathTopLayers());
@@ -972,10 +982,7 @@ const LAYERS = {
     sourceFile: null,
     layerIds: ["imp-land-ratio-fill", "imp-land-ratio-outline"],
     customLoad: async () => {
-      const data = await loadParcelsCombined();
-      if (!map.getSource("parcels-src")) {
-        map.addSource("parcels-src", { type: "geojson", data });
-      }
+      await ensureParcelsSource();
     },
     addLayers: () => {
       // ratio = DCAD improvement value / land value (as reported).
@@ -1002,6 +1009,7 @@ const LAYERS = {
         id: "imp-land-ratio-fill",
         type: "fill",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 11,
         filter: valFilter,
         paint: {
@@ -1013,6 +1021,7 @@ const LAYERS = {
         id: "imp-land-ratio-outline",
         type: "line",
         source: "parcels-src",
+        "source-layer": "parcels",
         minzoom: 14,
         filter: valFilter,
         paint: { "line-color": "#FFFFFF", "line-width": 0.2, "line-opacity": 0.4 },
@@ -1543,15 +1552,18 @@ function refreshLegend() {
       }
       groupRows[v.legendGroup].push({ o: v.legendOrder ?? 0, html: v.legendRow() });
     } else {
-      blocks.push({ html: v.legend() });
+      blocks.push({ html: v.legend(), key: k });
     }
   }
-  content.innerHTML = blocks.map((b) =>
-    b.group
-      ? `<div class="legend-block"><h3>${b.group}</h3>` +
-        groupRows[b.group].sort((a, c) => a.o - c.o).map((r) => r.html).join("") + `</div>`
-      : b.html
-  ).join("");
+  content.innerHTML = blocks.map((b) => {
+    if (b.group) {
+      let inner = `<div class="legend-block"><h3>${b.group}</h3>` +
+        groupRows[b.group].sort((a, c) => a.o - c.o).map((r) => r.html).join("");
+      if (VINTAGE_GROUP[b.group]) inner += `<div class="muted legend-vintage">${VINTAGE_GROUP[b.group]}</div>`;
+      return inner + `</div>`;
+    }
+    return withVintage(b.html, VINTAGE[b.key]);
+  }).join("");
 }
 
 
@@ -1866,6 +1878,11 @@ map.on("load", async () => {
   initValue3d();
   initValue2d();
   initStreetPattern();
+  initFloodplain();
+  initTransit();
+  initDemographics();
+  initGeocoder();
+  injectTooltips();
   zoningMenuReady = initZoningMenu();
 
   // Legend collapse / expand
@@ -3673,7 +3690,12 @@ LAYERS.buildings = {
   label: "Building footprints",
   minzoom: 13,
   sourceId: "buildings-src",
-  sourceFile: "data/buildings_dallas.geojson",
+  sourceFile: null,
+  customLoad: async () => {
+    if (!map.getSource("buildings-src")) {
+      map.addSource("buildings-src", { type: "vector", url: "pmtiles://data/buildings.pmtiles" });
+    }
+  },
   layerIds: ["buildings-3d"],
   addLayers: () => {
     const h = ["coalesce", ["get", "height_m"], 6];
@@ -3681,6 +3703,7 @@ LAYERS.buildings = {
       id: "buildings-3d",
       type: "fill-extrusion",
       source: "buildings-src",
+      "source-layer": "buildings",
       minzoom: 13,   // 3D extrusion of ~350k buildings — render once zoomed in; tilt to see height
       paint: {
         "fill-extrusion-height": h,
@@ -3841,3 +3864,425 @@ LAYERS.street_labels = {
   clickLayer: null,
   legend: () => "",
 };
+
+
+// ============================================================================
+// New layers (2026): Subsidized housing, Floodplain, Transit + place search
+// ============================================================================
+
+// ---- Subsidized (LIHTC) housing (points) -----------------------------------
+LAYERS.subsidized = {
+  label: "Subsidized (LIHTC) housing",
+  sourceId: "subsidized-src",
+  sourceFile: "data/subsidized_housing.geojson",
+  layerIds: ["subsidized"],
+  addLayers: () => {
+    map.addLayer({
+      id: "subsidized", type: "circle", source: "subsidized-src",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"],
+          10, ["*", 0.45, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]],
+          15, ["*", 1.1, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]]],
+        "circle-color": "#2E8B6B", "circle-opacity": 0.82,
+        "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
+      },
+    }, beneathTopLayers());
+  },
+  popup: (p) => `
+    <div class="popup-title">${p.name || "LIHTC property"}</div>
+    ${p.address ? `<div class="popup-row"><span class="label">Address</span><span class="value">${p.address}</span></div>` : ""}
+    <div class="popup-row"><span class="label">Total units</span><span class="value">${p.total_units ?? "?"}</span></div>
+    <div class="popup-row"><span class="label">Income-restricted</span><span class="value">${p.lihtc_units ?? "?"}</span></div>
+    ${p.year ? `<div class="popup-row"><span class="label">Awarded</span><span class="value">${p.year}</span></div>` : ""}
+    ${p.pop_served ? `<div class="popup-row"><span class="label">Serves</span><span class="value">${p.pop_served}</span></div>` : ""}`,
+  clickLayer: "subsidized",
+  legend: () => `<div class="legend-block"><h3>Subsidized (LIHTC) housing</h3>
+    <div class="swatch-row"><span class="swatch" style="background:#2E8B6B;border-radius:50%"></span>LIHTC property (sized by units)</div>
+    <div class="muted" style="margin-top:3px">TDHCA inventory (May 2026)</div></div>`,
+};
+
+// ---- Floodplain (FEMA NFHL) — 100-yr / 500-yr / both -----------------------
+const floodState = { master: false, mode: "both", added: false };
+function floodHatchImage(color, lw, dir) {   // seamless diagonal hatch tile; dir "fwd" (/), "back" (\), else cross
+  const s = 8, cv = document.createElement("canvas");
+  cv.width = cv.height = s;
+  const ctx = cv.getContext("2d");
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = "square";
+  ctx.beginPath();
+  if (dir !== "back") { ctx.moveTo(-1, s + 1); ctx.lineTo(s + 1, -1); }   // "/"
+  if (dir !== "fwd") { ctx.moveTo(-1, -1); ctx.lineTo(s + 1, s + 1); }    // "\"
+  for (let i = 0; i < 3; i++) ctx.stroke();   // overstroke so the antialiased thin lines read ~opaque, not see-through
+  return ctx.getImageData(0, 0, s, s);
+}
+function floodApply() {
+  const on100 = floodState.master && floodState.mode !== "500";
+  const on500 = floodState.master && floodState.mode !== "100";
+  [["flood-500-fill", on500], ["flood-500", on500], ["flood-100-fill", on100], ["flood-100", on100]]
+    .forEach(([id, on]) => { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none"); });
+  LAYERS.floodplain.enabled = floodState.master;
+  refreshLegend();
+}
+async function floodEnable() {
+  if (!map.getSource("flood-src")) {
+    const r = await fetch("data/floodplain.geojson");
+    map.addSource("flood-src", { type: "geojson", data: await r.json() });
+  }
+  if (!floodState.added) {
+    if (!map.hasImage("flood-hatch-500")) map.addImage("flood-hatch-500", floodHatchImage("#000000", 0.8, "back"));
+    if (!map.hasImage("flood-hatch-100")) map.addImage("flood-hatch-100", floodHatchImage("#E0E0E0", 1.0, "fwd"));
+    // 500-yr: light–medium blue fill with the darker-gray cross-hatch on top
+    map.addLayer({ id: "flood-500-fill", type: "fill", source: "flood-src",
+      filter: ["==", ["get", "category"], "500yr"],
+      paint: { "fill-color": "#7BAAD6", "fill-opacity": 0.45 } }, beneathTopLayers());
+    map.addLayer({ id: "flood-500", type: "fill", source: "flood-src",
+      filter: ["==", ["get", "category"], "500yr"],
+      paint: { "fill-pattern": "flood-hatch-500" } }, beneathTopLayers());
+    // 100-yr: dark blue fill with the gray cross-hatch on top
+    map.addLayer({ id: "flood-100-fill", type: "fill", source: "flood-src",
+      filter: ["==", ["get", "category"], "100yr"],
+      paint: { "fill-color": "#164A87", "fill-opacity": 0.5 } }, beneathTopLayers());
+    map.addLayer({ id: "flood-100", type: "fill", source: "flood-src",
+      filter: ["==", ["get", "category"], "100yr"],
+      paint: { "fill-pattern": "flood-hatch-100" } }, beneathTopLayers());
+    floodState.added = true;
+    LAYERS.floodplain.layerIds.forEach((id) => layersAdded.add(id));
+  }
+  floodApply();
+}
+function initFloodplain() {
+  const cb = document.querySelector('input[data-layer-group="floodplain"]');
+  if (!cb) return;
+  cb.addEventListener("change", async () => {
+    floodState.master = cb.checked;
+    if (cb.checked) {
+      cb.parentElement.classList.add("loading");
+      try { await floodEnable(); applyLayerOrder(); } finally { cb.parentElement.classList.remove("loading"); }
+    } else { floodApply(); }
+  });
+  document.querySelectorAll('input[name="floodplain_mode"]').forEach((rb) => {
+    rb.addEventListener("change", () => { if (rb.checked) { floodState.mode = rb.value; floodApply(); } });
+  });
+}
+LAYERS.floodplain = {
+  label: "Floodplain (FEMA)", enabled: false, layerIds: ["flood-500-fill", "flood-500", "flood-100-fill", "flood-100"],
+  legend: () => {
+    const rows = [];
+    if (floodState.mode !== "500") rows.push(`<div class="swatch-row"><span class="swatch" style="background:repeating-linear-gradient(135deg,#E0E0E0 0 1px,transparent 1px 5px),#164A87"></span>1% annual (100-yr)</div>`);
+    if (floodState.mode !== "100") rows.push(`<div class="swatch-row"><span class="swatch" style="background:repeating-linear-gradient(45deg,#000000 0 0.8px,transparent 0.8px 5px),#7BAAD6"></span>0.2% annual (500-yr)</div>`);
+    return `<div class="legend-block"><h3>Floodplain</h3>${rows.join("")}<div class="muted" style="margin-top:3px">FEMA NFHL</div></div>`;
+  },
+};
+
+// ---- Transit network (DART) — All routes / Frequent only -------------------
+const transitState = { master: false, mode: "frequent", added: false };
+const RAIL_LIGHT = "#A56FCE", RAIL_DARK = "#5E2A87";
+const BUS_FREQ = "#1E7B4A", BUS_MED = "#2D5AA8";
+function railTieImage(color) {   // vertical bar; along a line symbol it renders as a perpendicular cross-tie
+  const w = 7, h = 18, cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = color;
+  const bw = 2.6;
+  ctx.fillRect((w - bw) / 2, 0, bw, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+function transitFilter(kind) {
+  const base = ["==", ["get", "kind"], kind];
+  return transitState.mode === "frequent" ? ["all", base, ["==", ["get", "frequent"], true]] : base;
+}
+function transitApply() {
+  const vis = transitState.master ? "visible" : "none";
+  ["transit-bus", "transit-rail-base", "transit-rail-ties"].forEach((id) => {
+    if (map.getLayer(id)) {
+      map.setLayoutProperty(id, "visibility", vis);
+      map.setFilter(id, transitFilter(id === "transit-bus" ? "bus" : "rail"));
+    }
+  });
+  LAYERS.transit.enabled = transitState.master;
+  refreshLegend();
+}
+function transitPopup(p) {
+  return `<div class="popup-title">${p.route ? "Route " + p.route : "Route"}${p.name ? " — " + p.name : ""}</div>
+    <div class="popup-row"><span class="label">Type</span><span class="value">${p.kind === "rail" ? "Rail" : "Bus"}</span></div>
+    <div class="popup-row"><span class="label">Frequent</span><span class="value">${p.frequent ? "Yes (&le;20 min peak)" : "No"}</span></div>
+    ${p.hw_am ? `<div class="popup-row"><span class="label">AM headway</span><span class="value">~${p.hw_am} min</span></div>` : ""}
+    ${p.hw_pm ? `<div class="popup-row"><span class="label">PM headway</span><span class="value">~${p.hw_pm} min</span></div>` : ""}`;
+}
+async function transitEnable() {
+  if (!map.getSource("transit-src")) {
+    const r = await fetch("data/transit_routes.geojson");
+    map.addSource("transit-src", { type: "geojson", data: await r.json() });
+  }
+  if (!transitState.added) {
+    const railColor = ["case", ["get", "frequent"], RAIL_DARK, RAIL_LIGHT];   // frequent = dark purple
+    if (!map.hasImage("rail-tie-freq")) map.addImage("rail-tie-freq", railTieImage(RAIL_DARK));
+    if (!map.hasImage("rail-tie-infq")) map.addImage("rail-tie-infq", railTieImage(RAIL_LIGHT));
+    // Bus: 2 tiers by worst-peak headway — frequent green (25% thicker) vs >20 min dark blue
+    map.addLayer({ id: "transit-bus", type: "line", source: "transit-src",
+      filter: transitFilter("bus"), layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": ["step", ["get", "hw"], BUS_FREQ, 21, BUS_MED],
+        "line-width": ["interpolate", ["linear"], ["zoom"],
+          9, ["step", ["get", "hw"], 1.25, 21, 0.8],
+          15, ["step", ["get", "hw"], 3.25, 21, 2.1]],
+        "line-opacity": 0.9,
+      } }, beneathTopLayers());
+    // Rail: single purple line (dark if frequent) with perpendicular cross-ties as a SYMBOL layer —
+    // symbol-spacing places ties at even pixel intervals at any zoom, unlike a dasharray (which
+    // bunches near the line's vertices when zoomed out).
+    map.addLayer({ id: "transit-rail-base", type: "line", source: "transit-src",
+      filter: transitFilter("rail"), layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": railColor,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3, 15, 6.5], "line-opacity": 0.95 } }, beneathTopLayers());
+    map.addLayer({ id: "transit-rail-ties", type: "symbol", source: "transit-src",
+      filter: transitFilter("rail"),
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 10,
+        "icon-image": ["case", ["get", "frequent"], "rail-tie-freq", "rail-tie-infq"],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 15, 1.0],
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-rotation-alignment": "map",
+        "icon-pitch-alignment": "map",
+        "icon-keep-upright": false,
+      },
+      paint: { "icon-opacity": 0.95 } }, beneathTopLayers());
+    ["transit-bus", "transit-rail-base"].forEach((id) => {
+      map.on("click", id, (e) => {
+        const f = e.features?.[0]; if (!f) return;
+        new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat).setHTML(transitPopup(f.properties)).addTo(map);
+      });
+      map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
+      map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
+    });
+    transitState.added = true;
+    LAYERS.transit.layerIds.forEach((id) => layersAdded.add(id));
+  }
+  transitApply();
+}
+function initTransit() {
+  const cb = document.querySelector('input[data-layer-group="transit"]');
+  if (!cb) return;
+  cb.addEventListener("change", async () => {
+    transitState.master = cb.checked;
+    if (cb.checked) {
+      cb.parentElement.classList.add("loading");
+      try { await transitEnable(); applyLayerOrder(); } finally { cb.parentElement.classList.remove("loading"); }
+    } else { transitApply(); }
+  });
+  document.querySelectorAll('input[name="transit_mode"]').forEach((rb) => {
+    rb.addEventListener("change", () => { if (rb.checked) { transitState.mode = rb.value; transitApply(); } });
+  });
+}
+LAYERS.transit = {
+  label: "Transit network", enabled: false,
+  layerIds: ["transit-bus", "transit-rail-base", "transit-rail-ties"],
+  legend: () => {
+    const all = transitState.mode === "all";
+    const rows = [
+      `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${RAIL_DARK};border-top-width:4px"></span>Frequent rail</div>`,
+      all ? `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${RAIL_LIGHT};border-top-width:4px"></span>Other rail</div>` : "",
+      `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${BUS_FREQ};border-top-width:3.5px"></span>Frequent bus (&le;20 min)</div>`,
+      all ? `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${BUS_MED};border-top-width:2px"></span>Bus (&gt;20 min)</div>` : "",
+    ].filter(Boolean).join("");
+    return `<div class="legend-block"><h3>Transit network (DART)</h3>${rows}<div class="muted" style="margin-top:3px">DART GTFS · frequent = &le;20 min in 7-9am &amp; 4-6pm</div></div>`;
+  },
+};
+
+// ---- Place search (Photon geocoder, free/no-key, biased to Dallas) ---------
+function initGeocoder() {
+  const input = document.getElementById("geocoder-input");
+  const results = document.getElementById("geocoder-results");
+  if (!input || !results) return;
+  let timer = null, items = [], active = -1, marker = null;
+  const hide = () => { results.style.display = "none"; results.innerHTML = ""; items = []; active = -1; };
+  const label = (p) => [p.name, p.housenumber && p.street ? `${p.housenumber} ${p.street}` : p.street,
+    p.city || p.district || p.county, p.state].filter(Boolean).join(", ");
+  async function search(q) {
+    if (q.trim().length < 3) { hide(); return; }
+    try {
+      const url = `https://photon.komoot.io/api?q=${encodeURIComponent(q)}&lat=32.78&lon=-96.80&limit=6&lang=en`;
+      const d = await (await fetch(url)).json();
+      items = (d.features || []).filter((f) => f.geometry && f.geometry.type === "Point");
+      if (!items.length) { hide(); return; }
+      results.innerHTML = items.map((f, i) => `<div class="geocoder-item" data-i="${i}">${label(f.properties || {}) || "?"}</div>`).join("");
+      results.style.display = "block"; active = -1;
+    } catch (e) { hide(); }
+  }
+  function pick(i) {
+    const f = items[i]; if (!f) return;
+    const [lon, lat] = f.geometry.coordinates;
+    map.flyTo({ center: [lon, lat], zoom: 15 });
+    if (marker) marker.setLngLat([lon, lat]);
+    else marker = new maplibregl.Marker({ color: "#d95660" }).setLngLat([lon, lat]).addTo(map);
+    input.value = results.querySelector(`[data-i="${i}"]`)?.textContent || input.value;
+    hide();
+  }
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => search(input.value), 300); });
+  results.addEventListener("mousedown", (e) => { const el = e.target.closest(".geocoder-item"); if (el) { e.preventDefault(); pick(+el.dataset.i); } });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") active = Math.min(active + 1, items.length - 1);
+    else if (e.key === "ArrowUp") active = Math.max(active - 1, 0);
+    else if (e.key === "Enter") { pick(active >= 0 ? active : 0); return; }
+    else if (e.key === "Escape") { hide(); return; }
+    else return;
+    e.preventDefault();
+    results.querySelectorAll(".geocoder-item").forEach((el, i) => el.classList.toggle("active", i === active));
+  });
+  document.addEventListener("click", (e) => { if (!input.parentElement.contains(e.target)) hide(); });
+}
+
+// ---- Demographics (grouped, ACS 5-yr; metric radio) ------------------------
+const DEMO_PAL = ["#F1EEF6", "#BDC9E1", "#74A9CF", "#2B8CBE", "#045A8D"];
+const DEMO_NULL = "#D9D4CC";
+const DEMO_METRICS = {
+  income:          { label: "Median household income", prop: "income", edges: [40000, 60000, 85000, 120000], money: true },
+  renter_pct:      { label: "Renter share", prop: "renter_pct", edges: [15, 30, 45, 60] },
+  rent_burden_pct: { label: "Rent burden (≥30% of income)", prop: "rent_burden_pct", edges: [35, 45, 55, 65] },
+  poverty_pct:     { label: "Poverty rate", prop: "poverty_pct", edges: [8, 15, 25, 35] },
+  hisp_pct:        { label: "% Hispanic", prop: "hisp_pct", edges: [10, 25, 45, 70] },
+  white_pct:       { label: "% Non-Hispanic White", prop: "white_pct", edges: [10, 25, 45, 70] },
+  black_pct:       { label: "% Non-Hispanic Black", prop: "black_pct", edges: [10, 25, 45, 70] },
+  asian_pct:       { label: "% Non-Hispanic Asian", prop: "asian_pct", edges: [5, 10, 20, 35] },
+};
+const demoState = { master: false, metric: "income", added: false };
+function demoColor() {
+  const m = DEMO_METRICS[demoState.metric];
+  const step = ["step", ["get", m.prop], DEMO_PAL[0]];
+  m.edges.forEach((ed, i) => step.push(ed, DEMO_PAL[i + 1]));
+  return ["case", ["==", ["get", m.prop], null], DEMO_NULL, step];
+}
+function demoFmtVal(m, v) {
+  if (v == null) return "—";
+  return m.money ? "$" + Number(v).toLocaleString() : v + "%";
+}
+function demoPopup(p) {
+  const rows = Object.values(DEMO_METRICS).map((m) =>
+    `<div class="popup-row"><span class="label">${m.label}</span><span class="value">${demoFmtVal(m, p[m.prop])}</span></div>`).join("");
+  return `<div class="popup-title">Census tract ${p.geoid || ""}</div>${rows}`;
+}
+function demoLegend() {
+  const m = DEMO_METRICS[demoState.metric];
+  const f = (v) => m.money ? "$" + (v / 1000) + "k" : v + "%";
+  const e = m.edges;
+  const rows = [`<div class="swatch-row"><span class="swatch" style="background:${DEMO_PAL[0]}"></span>&lt; ${f(e[0])}</div>`];
+  for (let i = 0; i < e.length - 1; i++) rows.push(`<div class="swatch-row"><span class="swatch" style="background:${DEMO_PAL[i + 1]}"></span>${f(e[i])}–${f(e[i + 1])}</div>`);
+  rows.push(`<div class="swatch-row"><span class="swatch" style="background:${DEMO_PAL[e.length]}"></span>&ge; ${f(e[e.length - 1])}</div>`);
+  rows.push(`<div class="swatch-row"><span class="swatch" style="background:${DEMO_NULL}"></span>No data</div>`);
+  return `<div class="legend-block"><h3>${m.label}</h3>${rows.join("")}<div class="muted" style="margin-top:3px">ACS 2020–24 · by tract</div></div>`;
+}
+function demoApply() {
+  const vis = demoState.master ? "visible" : "none";
+  ["demo-fill", "demo-outline"].forEach((id) => { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis); });
+  if (demoState.added && demoState.master) map.setPaintProperty("demo-fill", "fill-color", demoColor());
+  LAYERS.demographics.enabled = demoState.master;
+  refreshLegend();
+}
+async function demoEnable() {
+  if (!map.getSource("demo-src")) {
+    const r = await fetch("data/acs_demographics_tracts.geojson");
+    map.addSource("demo-src", { type: "geojson", data: await r.json() });
+  }
+  if (!demoState.added) {
+    map.addLayer({ id: "demo-fill", type: "fill", source: "demo-src",
+      paint: { "fill-color": demoColor(), "fill-opacity": 0.72 } }, beneathTopLayers());
+    map.addLayer({ id: "demo-outline", type: "line", source: "demo-src",
+      paint: { "line-color": "#FFFFFF", "line-width": 0.3, "line-opacity": 0.4 } }, beneathTopLayers());
+    map.on("click", "demo-fill", (e) => {
+      const f = e.features?.[0]; if (!f) return;
+      new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat).setHTML(demoPopup(f.properties)).addTo(map);
+    });
+    map.on("mouseenter", "demo-fill", () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", "demo-fill", () => map.getCanvas().style.cursor = "");
+    demoState.added = true;
+    LAYERS.demographics.layerIds.forEach((id) => layersAdded.add(id));
+  }
+  demoApply();
+}
+function initDemographics() {
+  const cb = document.querySelector('input[data-layer-group="demographics"]');
+  if (!cb) return;
+  cb.addEventListener("change", async () => {
+    demoState.master = cb.checked;
+    if (cb.checked) {
+      cb.parentElement.classList.add("loading");
+      try { await demoEnable(); applyLayerOrder(); } finally { cb.parentElement.classList.remove("loading"); }
+    } else { demoApply(); }
+  });
+  document.querySelectorAll('input[name="demographics_metric"]').forEach((rb) => {
+    rb.addEventListener("change", () => { if (rb.checked) { demoState.metric = rb.value; demoApply(); } });
+  });
+}
+LAYERS.demographics = {
+  label: "Demographics", enabled: false, layerIds: ["demo-fill", "demo-outline"],
+  legend: () => demoLegend(),
+};
+
+// ---- Info tooltips on layer controls (native title, never clipped) ---------
+const TOOLTIPS = {
+  value3d: "Appraised value ÷ acreage, as 3-D towers. Height caps at $100M/acre by default (toggle to uncap); parcels under $100k/acre render flat/transparent. About 1 m per $25k/acre.",
+  value2d: "Flat-map version of value per acre — total, improvement, or land value ÷ acres.",
+  imp_land_ratio: "Structure (improvement) value ÷ land value. Low ratios flag under-built or teardown-prone land. Institutional and <$100k/acre parcels excluded.",
+  far_footprint: "Estimated floor-area ratio: CAD building floor area spread across building footprints ÷ lot area.",
+  decade_built: "Decade the main structure was built (CAD year built).",
+  land_use: "What is BUILT on each parcel (CAD land use). Some apartments are CAD-coded 'Commercial'. Differs from Base zoning, which is what's ALLOWED.",
+  zoning: "What each parcel ALLOWS (base zoning district). Planned Development (PD) is a catch-all where much of Dallas's density is actually entitled — it is not a base district.",
+  demographics: "Census ACS 2020–24 5-year estimates by tract. Small-sample tract values carry wide margins of error — treat as approximate.",
+  subsidized: "LIHTC (tax-credit) properties from the TDHCA inventory. Not public housing, project-based Section 8, or vouchers. Older awards may be leaving affordability.",
+  transit: "DART routes. 'Frequent' = 20-minute-or-better headway in BOTH the 7–9am and 4–6pm weekday peaks. Rail drawn with cross-ties; bus shaded by headway.",
+  floodplain: "FEMA National Flood Hazard Layer. 100-yr = 1% annual-chance (Special Flood Hazard Area); 500-yr = 0.2% annual-chance.",
+  street_pattern: "OSM street-network connectivity per tract: dendricity (tree-likeness), dead-end share, and intersection density — grid vs. cul-de-sac suburbia.",
+  jobs_density: "Workplace jobs per acre (Census LODES 2022). Wage tiers are MODEL-BASED (BLS sector-weighted), not measured earnings.",
+  oi_earnings: "Opportunity Atlas: predicted adult household income for children raised in low-income families here. A place-based MOBILITY measure, not current residents' income.",
+  rent_change: "Median gross-rent change in REAL (CPI-adjusted 2024$) dollars. Gray tracts = margin of error too high to trust; Zillow cross-hatch = series begins after the start year.",
+  value_change: "Median home-value change in REAL (CPI-adjusted 2024$) dollars. Same caveats as rent. ACS home value is top-coded, so a few high-end tracts can overstate gains.",
+  pop_change: "Population change 2010→2020 via a BLOCK-level crosswalk (more accurate than block-group). Toggle block-group vs. tract.",
+  hu_change: "Housing-unit change 2010→2020, same block-level crosswalk as population.",
+  permits: "New-construction building permits. MF counts include apartments in CAD 'Commercial' buildings but exclude hotels/retail. Slider sets the permit-year range.",
+};
+function injectTooltips() {
+  document.querySelectorAll("[data-layer],[data-layer-group]").forEach((cb) => {
+    const key = cb.dataset.layer || cb.dataset.layerGroup;
+    const tip = TOOLTIPS[key];
+    if (!tip) return;
+    const span = cb.closest("label")?.querySelector("span");
+    if (!span || span.querySelector(".info-tip")) return;
+    const b = document.createElement("span");
+    b.className = "info-tip"; b.textContent = "?";
+    b.title = tip; b.setAttribute("aria-label", tip);
+    span.appendChild(b);
+  });
+}
+
+// ---- Data-vintage line appended to each legend block ------------------------
+const VINTAGE = {
+  zoning: "City of Dallas zoning",
+  parcels: "DCAD 2025 + Collin / Denton CAD",
+  land_use: "DCAD 2025 / Collin / Denton CAD",
+  far_footprint: "DCAD 2025 + MS / OSM footprints",
+  decade_built: "DCAD 2025",
+  imp_land_ratio: "DCAD 2025",
+  jobs_density: "Census LODES 2022",
+  oi_earnings: "Opportunity Insights (Chetty et al.)",
+  block_groups: "Census 2010 & 2020",
+  tracts: "Census 2010 & 2020",
+  bg_hu: "Census 2010 & 2020",
+  tract_hu: "Census 2010 & 2020",
+  rent_change: "ACS 2012–24 & Zillow · real 2024$",
+  value_change: "ACS 2012–24 & Zillow · real 2024$",
+  street_pattern: "OpenStreetMap",
+  permits: "City of Dallas · 2000–2024",
+  buildings: "MS ML footprints + OSM",
+  parking: "OpenStreetMap",
+};
+const VINTAGE_GROUP = {
+  "Jurisdiction boundaries": "Census TIGER / City of Dallas",
+  "Street grid": "OpenStreetMap",
+};
+function withVintage(html, v) {
+  if (!v || !html) return html;
+  const i = html.lastIndexOf("</div>");
+  if (i < 0) return html;
+  return html.slice(0, i) + `<div class="muted legend-vintage">${v}</div>` + html.slice(i);
+}

@@ -390,9 +390,13 @@ These are the choices we've iterated to — don't volunteer changes unless asked
   us multiple times.
 - Census API key: `86cf199069aa31e1593fc7012564f38af501b568` — Shane's key tied to his
   Gmail. Pass via `CENSUS_API_KEY=... python build_pop_hu_geojsons.py`.
-- Local preview workflow: `python -m http.server 8000` in this folder, then
-  `http://localhost:8000` in a browser. Hard-refresh (Ctrl+Shift+R) after edits — browser
-  caches GeoJSON aggressively.
+- Local preview workflow: **`python serve.py`** in this folder (no-cache + HTTP-Range dev
+  server), then `http://localhost:8000`. Hard-refresh (Ctrl+Shift+R) after edits.
+  **Range support is REQUIRED** now that parcels/buildings are PMTiles: `pmtiles.js` reads
+  each tile via a byte-range request, and plain `python -m http.server` ignores the Range
+  header (returns 200 + the whole file), so those two layers render blank at every zoom.
+  `serve.py` answers 206 Partial Content. GitHub Pages supports Range natively, so this is a
+  local-preview-only concern.
 
 ---
 

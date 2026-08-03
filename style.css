@@ -370,6 +370,33 @@ html, body {
 }
 #copy-view-link:hover { background: #DCEAEE; }
 
+/* Place-search geocoder (sidebar header) */
+.geocoder { position: relative; margin-top: 8px; }
+#geocoder-input { width: 100%; box-sizing: border-box; padding: 6px 9px; font-size: 13px; font-family: inherit; border: 1px solid #C8C8C8; border-radius: 4px; }
+#geocoder-input:focus { outline: none; border-color: #4A90A4; }
+.geocoder-results { display: none; position: absolute; z-index: 30; left: 0; right: 0; top: 100%; margin-top: 2px; background: #FFF; border: 1px solid #C8C8C8; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.14); max-height: 240px; overflow-y: auto; }
+.geocoder-item { padding: 6px 9px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #F0F0F0; }
+.geocoder-item:last-child { border-bottom: none; }
+.geocoder-item:hover, .geocoder-item.active { background: #EAF2F4; }
+
+/* About & Sources panel */
+.about-group { padding: 2px 0 6px; }
+#about-panel > summary { cursor: pointer; font-size: 13px; font-weight: 600; padding: 6px 0; list-style: none; color: #4A90A4; }
+#about-panel > summary::-webkit-details-marker { display: none; }
+#about-panel > summary::before { content: "▸ "; }
+#about-panel[open] > summary::before { content: "▾ "; }
+.about-body { font-size: 12px; line-height: 1.45; color: #444; }
+.about-body h4 { margin: 8px 0 4px; font-size: 12px; }
+.about-body p { margin: 4px 0; }
+.source-list { margin: 2px 0; padding-left: 15px; }
+.source-list li { margin-bottom: 4px; }
+.about-body a { color: #4A90A4; }
+
+/* Info tooltips + legend vintage */
+.info-tip { display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; margin-left:5px; border-radius:50%; background:#C4D3D8; color:#2F6678; font-size:9px; font-weight:700; line-height:1; cursor:help; vertical-align:middle; flex:none; }
+.info-tip:hover { background:#4A90A4; color:#fff; }
+.legend-vintage { margin-top:4px; font-size:10px; opacity:.7; font-style:italic; }
+
 /* Reports section button */
 .report-button {
   width: 100%;
