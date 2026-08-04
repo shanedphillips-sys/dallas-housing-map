@@ -198,7 +198,8 @@ html, body {
   align-items: center;
 }
 .layer-toggle-grouped:has(input[data-layer-group]:checked) .grouped-controls,
-.layer-toggle-grouped:has(input[data-layer="zoning"]:checked) .grouped-controls {
+.layer-toggle-grouped:has(input[data-layer="zoning"]:checked) .grouped-controls,
+.layer-toggle-grouped:has(input[data-layer="land_use"]:checked) .grouped-controls {
   display: flex;
 }
 
