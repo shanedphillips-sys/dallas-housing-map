@@ -42,7 +42,10 @@ Raw source files marked *(OneDrive)* live under
 All parcel layers share one vector-tile source **`data/parcels.pmtiles`** (source-layer
 `parcels`), built from `data/parcels_{nw,ne,sw,se}.geojson` by `build_pmtiles.py` (pyogrio /
 GDAL PMTiles driver — the browser streams only visible tiles instead of loading ~215 MB of
-GeoJSON up front). The quadrant GeoJSONs remain the editable source of truth.
+GeoJSON up front). The quadrant GeoJSONs remain the editable source of truth. During the
+tile build each parcel is also stamped with **`base_zone`** — the City base-zoning district
+(`zone_norm`) whose polygon contains the parcel's representative point — so the webmap can
+intersect land use with zoning as a cheap attribute filter.
 
 **Parcel base:** DCAD 2025 Certified (Dallas Co.) + Collin CAD + Denton CAD, account-level merge.
 Pipeline: `build_parcels_geojson.py` → `merge_collin_cad.py` → `merge_denton_cad.py`
@@ -53,7 +56,7 @@ Pipeline: `build_parcels_geojson.py` → `merge_collin_cad.py` → `merge_denton
 |---|---|---|
 | Assessor parcels | full DCAD/CCAD/Denton attributes | Popup only; neutral fill |
 | Base zoning | City of Dallas Base_Zoning *(OneDrive)* | `data/zoning.geojson`; colored by `category`; collapsible per-category picker filters to individual base districts (`zone_norm`; (A)/(SAH) parentheticals merged) (catalog: `build_zoning_districts.py` → `data/zoning_districts.json`) |
-| Land use | CAD SPTD land-use code | Collapsed to ~17 display categories; `totexempt=='X'` reclassified Institutional |
+| Land use | CAD SPTD land-use code | Collapsed to ~17 display categories; `totexempt=='X'` reclassified Institutional; collapsible family→category picker (mirrors the zoning one). **Intersection:** an "only within selected zoning districts" toggle clips the layer to parcels whose `base_zone` is in the Base-zoning picker's current selection |
 | Building floor-area ratio (FAR) | CAD `building_sf` ÷ lot area | Footprint-attributed FAR (`foot_far`): building floor area split across overlapping footprints; `build_footprint_far.py` |
 | Decade structure built | CAD `year_built` | Binned by decade |
 | Improvement / land value ratio | CAD `impr_val` ÷ `land_val` (as reported) | Parcels < $100k/acre and Institutional/Government excluded |

@@ -19,7 +19,31 @@ WEB = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(WEB, "data")
 
 
-def build(out_name, layer_name, srcs, minzoom, maxzoom, sample_bbox):
+def add_base_zone(gdf):
+    """Bake the City base-zoning district (zone_norm) onto each parcel via a
+    representative-point-in-polygon join against zoning.geojson, so the webmap can
+    intersect land use with zoning as a cheap attribute filter (base_zone == 'PD').
+    Parcels outside the City of Dallas (suburban/county) get base_zone = None."""
+    zp = os.path.join(DATA, "zoning.geojson")
+    if not os.path.exists(zp):
+        print("  zoning.geojson missing; base_zone not added", flush=True)
+        gdf = gdf.copy()
+        gdf["base_zone"] = None
+        return gdf
+    zoning = gpd.read_file(zp).to_crs(3857)[["zone_norm", "geometry"]]
+    pts = gdf.to_crs(3857).copy()
+    pts["geometry"] = pts.geometry.representative_point()   # guaranteed inside each parcel
+    joined = gpd.sjoin(pts, zoning, how="left", predicate="within")
+    joined = joined[~joined.index.duplicated(keep="first")]  # boundary point in >1 poly -> keep first
+    gdf = gdf.copy()
+    gdf["base_zone"] = joined["zone_norm"].reindex(gdf.index).values
+    n = int(gdf["base_zone"].notna().sum())
+    print(f"  base_zone: {n}/{len(gdf)} parcels within City zoning; top:",
+          gdf["base_zone"].value_counts().head(6).to_dict(), flush=True)
+    return gdf
+
+
+def build(out_name, layer_name, srcs, minzoom, maxzoom, sample_bbox, enrich=None):
     frames = []
     for s in srcs:
         p = os.path.join(DATA, s)
@@ -35,6 +59,8 @@ def build(out_name, layer_name, srcs, minzoom, maxzoom, sample_bbox):
     gdf = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
     gdf = gpd.GeoDataFrame(gdf, geometry="geometry", crs=(frames[0].crs or 4326))
     gdf = gdf.to_crs(4326)
+    if enrich:
+        gdf = enrich(gdf)
     n_src = len(gdf)
 
     out = os.path.join(DATA, out_name)
@@ -69,7 +95,7 @@ def build(out_name, layer_name, srcs, minzoom, maxzoom, sample_bbox):
 # downtown Dallas bbox for the parcel sanity sample; same area works for buildings
 build("parcels.pmtiles", "parcels",
       ["parcels_nw.geojson", "parcels_ne.geojson", "parcels_sw.geojson", "parcels_se.geojson"],
-      11, 14, (-96.81, 32.77, -96.79, 32.79))
+      11, 14, (-96.81, 32.77, -96.79, 32.79), enrich=add_base_zone)
 build("buildings.pmtiles", "buildings",
       ["buildings_dallas.geojson"],
       12, 15, (-96.81, 32.77, -96.79, 32.79))

@@ -398,6 +398,10 @@ html, body {
 .info-tip:hover { background:#4A90A4; color:#fff; }
 .legend-vintage { margin-top:4px; font-size:10px; opacity:.7; font-style:italic; }
 
+/* Land-use / zoning intersection toggle */
+.lu-intersect-row { display: flex; align-items: center; gap: 6px; width: 100%; font-size: 12px; font-weight: 600; cursor: pointer; padding: 1px 2px 6px; border-bottom: 1px solid #E2E2E2; margin-bottom: 4px; }
+.lu-intersect-row input { margin: 0; flex: 0 0 auto; }
+
 /* Reports section button */
 .report-button {
   width: 100%;

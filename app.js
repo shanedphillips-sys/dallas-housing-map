@@ -219,6 +219,7 @@ function applyZoningSelection() {
     map.setFilter("zoning-fill", f);
     map.setFilter("zoning-outline", f);
   }
+  if (intersectState.on) applyLandUseSelection();   // intersection clips land use to this selection
   refreshLegend();
 }
 
@@ -356,9 +357,25 @@ function landUseFilter() {
   return ["in", ["get", "land_use_cat"], ["literal", [...luState.selected]]];
 }
 
+// Intersection: clip the land-use layer to the current Base-zoning picker selection.
+// Uses "base_zone" (the City zone_norm) baked onto each parcel by build_pmtiles.py.
+const intersectState = { on: false };
+function zoneIntersectFilter() {
+  if (!intersectState.on) return null;
+  if (zoningState.selected && zoningState.selected.size < zoningState.total) {
+    return ["in", ["get", "base_zone"], ["literal", [...zoningState.selected]]];
+  }
+  return ["has", "base_zone"];   // all districts selected -> within the City zoning footprint
+}
+function landUseEffectiveFilter() {
+  const parts = [landUseFilter(), zoneIntersectFilter()].filter(Boolean);
+  if (!parts.length) return null;
+  return parts.length === 1 ? parts[0] : ["all", ...parts];
+}
+
 function applyLandUseSelection() {
   if (LAYERS.land_use && LAYERS.land_use.enabled && map.getLayer("land-use-fill")) {
-    const f = landUseFilter();
+    const f = landUseEffectiveFilter();
     map.setFilter("land-use-fill", f);       // null clears the filter (show all)
     map.setFilter("land-use-outline", f);
     const vac = ["in", ["get", "land_use_cat"], ["literal", VACANT_DATA_VALUES]];
@@ -394,7 +411,15 @@ function buildLandUseLegend() {
   const sub = filtered
     ? `<div class="muted" style="margin:-2px 0 5px 0">${luState.selected.size} of ${luState.total} land uses shown</div>`
     : "";
-  return `<div class="legend-block"><h3>Land Use</h3>${sub}${rows || '<div class="muted">No land uses selected</div>'}</div>`;
+  let ixNote = "";
+  if (intersectState.on) {
+    const zsel = zoningState.selected;
+    const label = (zsel && zsel.size < zoningState.total)
+      ? (zsel.size <= 3 ? [...zsel].join(", ") : `${zsel.size} zoning districts`)
+      : "the City zoning area";
+    ixNote = `<div class="muted" style="margin:-2px 0 5px 0">◇ Within ${label}</div>`;
+  }
+  return `<div class="legend-block"><h3>Land Use</h3>${sub}${ixNote}${rows || '<div class="muted">No land uses selected</div>'}</div>`;
 }
 
 // Build the collapsible family -> land-use checkbox menu under "Land use".
@@ -451,6 +476,11 @@ function initLandUseMenu() {
       host.querySelectorAll(".zone-cat-all").forEach((c) => { c.checked = on; c.indeterminate = false; });
       recomputeLandUseSelection();
     });
+  });
+  const ix = document.getElementById("lu-intersect");
+  if (ix) ix.addEventListener("change", () => {
+    intersectState.on = ix.checked;
+    applyLandUseSelection();
   });
   luState.built = true;
 }
@@ -923,8 +953,8 @@ const LAYERS = {
         ? LAND_USE_DEFS.find((d) => d.dataValue === "Other").color
         : "#C4BDB3");
 
-      // Respect the land-use picker selection at (re)add time.
-      const luF = landUseFilter();
+      // Respect the land-use picker selection (and any zoning intersection) at (re)add time.
+      const luF = landUseEffectiveFilter();
       const luVac = ["in", ["get", "land_use_cat"], ["literal", VACANT_DATA_VALUES]];
 
       // Base fill — every parcel colored by category (vacant uses the same
