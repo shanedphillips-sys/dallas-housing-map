@@ -2093,6 +2093,9 @@ function serializeMapState() {
   if (sld.length) params.set("s", sld.join("~"));
   if (zoningState.selected && zoningState.total && zoningState.selected.size < zoningState.total)
     params.set("zon", [...zoningState.selected].join("~"));
+  if (luState.selected && luState.total && luState.selected.size < luState.total)
+    params.set("lu", [...luState.selected].join("~"));
+  if (intersectState.on) params.set("ix", "1");
   return params.toString();
 }
 
@@ -2147,6 +2150,17 @@ async function applyMapState(hashStr) {
       const el = document.getElementById(pair.slice(0, pair.indexOf(":")));
       if (el) el.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    // intersection toggle + land-use category selection (restore before zoning so the
+    // combined clip resolves correctly; the land-use menu is built synchronously)
+    const ixEl = document.getElementById("lu-intersect");
+    if (ixEl) { intersectState.on = params.get("ix") === "1"; ixEl.checked = intersectState.on; }
+    const lu = params.get("lu");
+    if (lu != null) {
+      const luWant = new Set(lu.split("~").filter(Boolean));
+      document.querySelectorAll("#land-use-menu .zone-cb").forEach((cb) => { cb.checked = luWant.has(cb.dataset.lu); });
+      document.querySelectorAll("#land-use-menu .zone-cat").forEach((c) => syncLuCatAll(c));
+      recomputeLandUseSelection();
+    }
     // zoning district selection (wait for the async menu to build)
     const zon = params.get("zon");
     if (zon != null && zoningMenuReady) {
@@ -2156,6 +2170,8 @@ async function applyMapState(hashStr) {
       document.querySelectorAll("#zoning-zone-menu .zone-cat").forEach((c) => syncZoningCatAll(c));
       recomputeZoningSelection();
     }
+    // now that the land-use layer is live + zoning restored, apply the combined clip
+    if (params.has("ix") || params.has("lu")) applyLandUseSelection();
     const m = params.get("m");
     if (m) {
       const [lng, lat, z, pitch, bearing] = m.split(",").map(Number);
