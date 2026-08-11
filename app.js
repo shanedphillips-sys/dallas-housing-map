@@ -362,8 +362,10 @@ function landUseFilter() {
 const intersectState = { on: false };
 function zoneIntersectFilter() {
   if (!intersectState.on) return null;
-  if (zoningState.selected && zoningState.selected.size < zoningState.total) {
-    return ["in", ["get", "base_zone"], ["literal", [...zoningState.selected]]];
+  const sel = zoningState.selected;
+  if (sel && sel.size === 0) return null;   // no districts chosen -> no zoning clip (don't blank the map)
+  if (sel && sel.size < zoningState.total) {
+    return ["in", ["get", "base_zone"], ["literal", [...sel]]];
   }
   return ["has", "base_zone"];   // all districts selected -> within the City zoning footprint
 }
@@ -414,10 +416,14 @@ function buildLandUseLegend() {
   let ixNote = "";
   if (intersectState.on) {
     const zsel = zoningState.selected;
-    const label = (zsel && zsel.size < zoningState.total)
-      ? (zsel.size <= 3 ? [...zsel].join(", ") : `${zsel.size} zoning districts`)
-      : "the City zoning area";
-    ixNote = `<div class="muted" style="margin:-2px 0 5px 0">◇ Within ${label}</div>`;
+    if (zsel && zsel.size === 0) {
+      ixNote = `<div class="muted" style="margin:-2px 0 5px 0">◇ No zoning districts selected — showing all</div>`;
+    } else {
+      const label = (zsel && zsel.size < zoningState.total)
+        ? (zsel.size <= 3 ? [...zsel].join(", ") : `${zsel.size} zoning districts`)
+        : "the City zoning area";
+      ixNote = `<div class="muted" style="margin:-2px 0 5px 0">◇ Within ${label}</div>`;
+    }
   }
   return `<div class="legend-block"><h3>Land Use</h3>${sub}${ixNote}${rows || '<div class="muted">No land uses selected</div>'}</div>`;
 }
