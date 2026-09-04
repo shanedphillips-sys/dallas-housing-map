@@ -16,12 +16,10 @@ const BASEMAPS = {
     sourceId: "basemap-light-src",
     layerId: "basemap-light",
     tiles: [
-      "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-      "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-      "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     ],
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-    maxzoom: 19,
+    attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+    maxzoom: 16,
   },
   osm: {
     sourceId: "basemap-osm-src",
