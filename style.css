@@ -203,6 +203,21 @@ html, body {
   display: flex;
 }
 
+/* Multi-check groups (Subsidized housing, Transit network): a plain title plus
+   several independent checkboxes, always shown — no parent master toggle, one
+   checkbox per row. */
+.layer-toggle-multi .grouped-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.multi-title {
+  flex: 1;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
 .radio-option {
   display: inline-flex;
   align-items: center;

@@ -1,0 +1,28 @@
+{
+ "86134": {
+  "name": "3737 Timberglen Dr",
+  "address": "3737 Timberglen Dr",
+  "owner": "Pecos Housing Finance Corporation",
+  "total_units": 1,
+  "year_built": 1984,
+  "acquired": null,
+  "lihtc": false,
+  "stateCd": "B1",
+  "useCd": "MF001",
+  "lon": -96.851274,
+  "lat": 33.005247
+ },
+ "1027658": {
+  "name": "3301 President George Bush Tpke",
+  "address": "3301 President George Bush Tpke",
+  "owner": "Garland Housing Finance Corporation",
+  "total_units": 380,
+  "year_built": 2023,
+  "acquired": null,
+  "lihtc": false,
+  "stateCd": "B1",
+  "useCd": "MF001",
+  "lon": -96.860427,
+  "lat": 32.998551
+ }
+}

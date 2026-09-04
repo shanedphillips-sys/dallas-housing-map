@@ -366,23 +366,22 @@
             </div>
           </div>
 
-          <div class="layer-toggle">
+          <div class="layer-toggle layer-toggle-grouped layer-toggle-multi" data-group-layers="subsidized pfc_hfc">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <label>
-              <input type="checkbox" data-layer="subsidized" />
-              <span>Subsidized (LIHTC) housing</span>
-            </label>
+            <div class="multi-title" data-tip="subsidized">Subsidized housing</div>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="subsidized" /><span>LIHTC (tax credit)</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="pfc_hfc" /><span>PFC / HFC</span></label>
+            </div>
           </div>
 
-          <div class="layer-toggle layer-toggle-grouped">
+          <div class="layer-toggle layer-toggle-grouped layer-toggle-multi" data-group-layers="transit">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <label>
-              <input type="checkbox" data-layer-group="transit" />
-              <span>Transit network</span>
-            </label>
+            <div class="multi-title" data-tip="transit">Transit network</div>
             <div class="grouped-controls grouped-controls-stacked">
-              <label class="radio-option" style="width:100%"><input type="radio" name="transit_mode" value="frequent" checked /><span>Frequent only (≤20 min peak)</span></label>
-              <label class="radio-option" style="width:100%"><input type="radio" name="transit_mode" value="all" /><span>All routes</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-transit="rail" /><span>Rail</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-transit="busFreq" /><span>Frequent buses (≤20 min peak)</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-transit="busOther" /><span>Other buses</span></label>
             </div>
           </div>
 
@@ -419,7 +418,7 @@
               <li><b>Building footprints (3D)</b> — <a href="https://github.com/microsoft/GlobalMLBuildingFootprints" target="_blank" rel="noopener">Microsoft ML footprints</a> + OSM heights</li>
               <li><b>Streets, alleys, parking, water</b> — <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a></li>
               <li><b>Transit network</b> — <a href="https://www.dart.org" target="_blank" rel="noopener">DART</a> GTFS</li>
-              <li><b>Subsidized housing</b> — <a href="https://www.tdhca.texas.gov" target="_blank" rel="noopener">TDHCA</a> LIHTC inventory</li>
+              <li><b>Subsidized housing</b> — <a href="https://www.tdhca.texas.gov" target="_blank" rel="noopener">TDHCA</a> LIHTC inventory; PFC / HFC projects from <a href="https://www.dallascad.org" target="_blank" rel="noopener">DCAD</a></li>
               <li><b>Floodplain</b> — <a href="https://www.fema.gov/flood-maps" target="_blank" rel="noopener">FEMA</a> National Flood Hazard Layer</li>
             </ul>
             <p class="muted">Search © OpenStreetMap / Photon. Full per-layer methods are documented in DATA_SOURCES.md in the project repository.</p>

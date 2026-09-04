@@ -18,7 +18,7 @@ Raw source files marked *(OneDrive)* live under
 | Council districts | City of Dallas Council_Boundaries *(OneDrive)* | As provided | `data/council.geojson` |
 | Rail stations | DART Rail_Stops *(OneDrive)* | As provided | `data/rail_stops.geojson` |
 | Half-mile station areas | DART rail stops | 0.5-mi (2,640 ft) buffers around station points | `data/station_areas.geojson` |
-| Transit network (DART) | DART GTFS feed | Weekday routes; **frequent** = ≤20-min headway in *both* 7–9am & 4–6pm peaks (rail service resolved via `calendar_dates`); rail drawn with cross-ties, bus in 3 headway tiers | `build_frequent_transit.py` → `data/transit_routes.geojson` |
+| Transit network (DART) | DART GTFS feed | Three independent toggles — Rail (light-rail + commuter, cross-ties), Frequent buses, Other buses. **Frequent** = ≤20-min headway in *both* 7–9am & 4–6pm weekday peaks (rail service resolved via `calendar_dates`); rail dark/light purple by frequency, buses green (≤20 min) / blue (>20 min) | `build_frequent_transit.py` → `data/transit_routes.geojson` |
 
 ## Streets, alleys & parking (OpenStreetMap)
 
@@ -84,7 +84,8 @@ Pipeline: `build_parcels_geojson.py` → `merge_collin_cad.py` → `merge_denton
 
 | Layer | Source | Method | Build script → data |
 |---|---|---|---|
-| Subsidized (LIHTC) housing | TDHCA HTC Property Inventory (May 2026) | Tax-credit properties; dedup by lat/lon (keep max Total Units); clip to city; circle area ∝ unit count | `build_subsidized_housing.py` → `data/subsidized_housing.geojson` |
+| Subsidized housing — LIHTC | TDHCA HTC Property Inventory (May 2026) | Tax-credit properties; dedup by lat/lon (keep max Total Units); clip to city; circle area ∝ unit count | `build_subsidized_housing.py` → `data/subsidized_housing.geojson` |
+| Subsidized housing — PFC / HFC | DCAD 2025 (ACCOUNT_INFO + COM_DETAIL) + Collin CAD 2025 + Denton protax | Apartment parcels owned by a public facility / housing finance corporation (owner-name match, City of Dallas), **all years**; units + earliest year built; located via parcel geometry; circle area ∝ unit count. LIHTC-overlap flagged (TDHCA# in name). Denton owner names come from the 19 GB protax export, cached once by `build_denton_pfc.py` → `data/denton_pfc_hfc.json` (the in-repo Denton slim omits owners) | `build_pfc_hfc_points.py` → `data/pfc_hfc_projects.geojson` |
 | Floodplain (100-yr / 500-yr) | FEMA National Flood Hazard Layer | 1%-annual SFHA (`A*`/`V*`) vs 0.2%-annual zones; grid-tiled ArcGIS fetch (10k-record cap), dedup by OBJECTID, clip to city; gray cross-hatch fills (100-yr thicker) | `build_floodplain.py` → `data/floodplain.geojson` |
 
 ## Place search

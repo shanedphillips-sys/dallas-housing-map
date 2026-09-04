@@ -1886,6 +1886,16 @@ function applyLayerOrder() {
       }
       continue;
     }
+    // Multi-check groups (Subsidized housing, Transit network): move every
+    // sub-layer of the group as one unit so the row drags together.
+    const groupLayers = items[i].dataset.groupLayers;
+    if (groupLayers) {
+      groupLayers.split(/\s+/).forEach((k) => {
+        const L = LAYERS[k];
+        if (L) L.layerIds.forEach((id) => { if (map.getLayer(id)) map.moveLayer(id); });
+      });
+      continue;
+    }
     let key = cb.dataset.layer;
     // Grouped (pop_change / hu_change): pick whichever sub-layer's radio
     // is currently selected.
@@ -2102,6 +2112,9 @@ function serializeMapState() {
   document.querySelectorAll('input[data-layer]:checked, input[data-layer-group]:checked')
     .forEach((cb) => on.push(cb.dataset.layer || cb.dataset.layerGroup));
   params.set("on", on.join("~"));
+  const tr = [];   // transit sub-checkboxes (rail / busFreq / busOther)
+  document.querySelectorAll("input[data-transit]:checked").forEach((cb) => tr.push(cb.dataset.transit));
+  if (tr.length) params.set("tr", tr.join("~"));
   const rad = [];
   document.querySelectorAll('input[type="radio"]:checked').forEach((rb) => {
     if (rb.name && rb.name !== "basemap") rad.push(`${rb.name}:${rb.value}`);
@@ -2169,6 +2182,14 @@ async function applyMapState(hashStr) {
       const sub = document.getElementById("street-subrow");
       if (master) master.checked = anyStreet;
       if (sub) sub.style.display = anyStreet ? "" : "none";
+    }
+    // transit sub-checkboxes (own param, since they aren't data-layer/-group)
+    {
+      const want = new Set((params.get("tr") || "").split("~").filter(Boolean));
+      document.querySelectorAll("input[data-transit]").forEach((cb) => {
+        const shouldBe = want.has(cb.dataset.transit);
+        if (cb.checked !== shouldBe) { cb.checked = shouldBe; cb.dispatchEvent(new Event("change", { bubbles: true })); }
+      });
     }
     // refresh sliders now that their layers are live (updates labels + expression)
     (params.get("s") || "").split("~").filter(Boolean).forEach((pair) => {
@@ -4057,9 +4078,17 @@ LAYERS.street_labels = {
 // New layers (2026): Subsidized housing, Floodplain, Transit + place search
 // ============================================================================
 
-// ---- Subsidized (LIHTC) housing (points) -----------------------------------
+// ---- Subsidized housing (points): LIHTC + PFC/HFC --------------------------
+// Two independent point layers under one "Subsidized housing" group (index.html
+// data-group-layers, moved together by applyLayerOrder). LIHTC = TDHCA tax-credit
+// inventory (green); PFC/HFC = public-facility / housing-finance-corp apartment
+// projects from DCAD (orange, all years). Both size the dot by total units and
+// collapse into one "Subsidized housing" legend block via legendGroup.
+const SUBSIDIZED_RADIUS = ["interpolate", ["linear"], ["zoom"],
+  10, ["*", 0.45, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]],
+  15, ["*", 1.1, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]]];
 LAYERS.subsidized = {
-  label: "Subsidized (LIHTC) housing",
+  label: "LIHTC (subsidized)",
   sourceId: "subsidized-src",
   sourceFile: "data/subsidized_housing.geojson",
   layerIds: ["subsidized"],
@@ -4067,9 +4096,7 @@ LAYERS.subsidized = {
     map.addLayer({
       id: "subsidized", type: "circle", source: "subsidized-src",
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"],
-          10, ["*", 0.45, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]],
-          15, ["*", 1.1, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]]],
+        "circle-radius": SUBSIDIZED_RADIUS,
         "circle-color": "#2E8B6B", "circle-opacity": 0.82,
         "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
       },
@@ -4083,9 +4110,36 @@ LAYERS.subsidized = {
     ${p.year ? `<div class="popup-row"><span class="label">Awarded</span><span class="value">${p.year}</span></div>` : ""}
     ${p.pop_served ? `<div class="popup-row"><span class="label">Serves</span><span class="value">${p.pop_served}</span></div>` : ""}`,
   clickLayer: "subsidized",
-  legend: () => `<div class="legend-block"><h3>Subsidized (LIHTC) housing</h3>
-    <div class="swatch-row"><span class="swatch" style="background:#2E8B6B;border-radius:50%"></span>LIHTC property (sized by units)</div>
-    <div class="muted" style="margin-top:3px">TDHCA inventory (May 2026)</div></div>`,
+  legendGroup: "Subsidized housing",
+  legendOrder: 1,
+  legendRow: () => `<div class="swatch-row"><span class="swatch" style="background:#2E8B6B;border-radius:50%"></span>LIHTC (tax credit) · sized by units</div>`,
+};
+LAYERS.pfc_hfc = {
+  label: "PFC / HFC",
+  sourceId: "pfc-hfc-src",
+  sourceFile: "data/pfc_hfc_projects.geojson",
+  layerIds: ["pfc-hfc"],
+  addLayers: () => {
+    map.addLayer({
+      id: "pfc-hfc", type: "circle", source: "pfc-hfc-src",
+      paint: {
+        "circle-radius": SUBSIDIZED_RADIUS,
+        "circle-color": "#E8820E", "circle-opacity": 0.82,
+        "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
+      },
+    }, beneathTopLayers());
+  },
+  popup: (p) => `
+    <div class="popup-title">${p.name || "PFC/HFC property"}</div>
+    ${p.address ? `<div class="popup-row"><span class="label">Address</span><span class="value">${p.address}</span></div>` : ""}
+    <div class="popup-row"><span class="label">Total units</span><span class="value">${p.units_est ? "~" + p.total_units + " (est. from building area)" : (p.total_units ?? "?")}</span></div>
+    ${p.year_built ? `<div class="popup-row"><span class="label">Built</span><span class="value">${p.year_built}</span></div>` : ""}
+    ${p.owner ? `<div class="popup-row"><span class="label">Owner</span><span class="value">${p.owner}</span></div>` : ""}
+    ${p.lihtc ? `<div class="popup-row"><span class="label">Also LIHTC</span><span class="value">Yes</span></div>` : ""}`,
+  clickLayer: "pfc-hfc",
+  legendGroup: "Subsidized housing",
+  legendOrder: 2,
+  legendRow: () => `<div class="swatch-row"><span class="swatch" style="background:#E8820E;border-radius:50%"></span>PFC / HFC · sized by units</div>`,
 };
 
 // ---- Floodplain (FEMA NFHL) — 100-yr / 500-yr / both -----------------------
@@ -4160,8 +4214,12 @@ LAYERS.floodplain = {
   },
 };
 
-// ---- Transit network (DART) — All routes / Frequent only -------------------
-const transitState = { master: false, mode: "frequent", added: false };
+// ---- Transit network (DART): Rail / Frequent buses / Other buses -----------
+// Three independent checkboxes (index.html data-transit) over one shared source.
+// Rail = all DART rail (dark purple frequent / light purple other) with cross-ties;
+// buses split by worst-peak headway into frequent (<=20 min, green) and other
+// (>20 min, blue). Any combination can be shown at once.
+const transitState = { rail: false, busFreq: false, busOther: false, added: false };
 const RAIL_LIGHT = "#A56FCE", RAIL_DARK = "#5E2A87";
 const BUS_FREQ = "#1E7B4A", BUS_MED = "#2D5AA8";
 function railTieImage(color) {   // vertical bar; along a line symbol it renders as a perpendicular cross-tie
@@ -4173,19 +4231,27 @@ function railTieImage(color) {   // vertical bar; along a line symbol it renders
   ctx.fillRect((w - bw) / 2, 0, bw, h);
   return ctx.getImageData(0, 0, w, h);
 }
-function transitFilter(kind) {
-  const base = ["==", ["get", "kind"], kind];
-  return transitState.mode === "frequent" ? ["all", base, ["==", ["get", "frequent"], true]] : base;
+function busFilter() {   // which bus headway tiers to show, from the two bus checkboxes
+  const base = ["==", ["get", "kind"], "bus"];
+  if (transitState.busFreq && transitState.busOther) return base;
+  if (transitState.busFreq) return ["all", base, ["==", ["get", "frequent"], true]];
+  if (transitState.busOther) return ["all", base, ["==", ["get", "frequent"], false]];
+  return ["==", ["get", "kind"], "__none__"];   // neither checked: match nothing
 }
 function transitApply() {
-  const vis = transitState.master ? "visible" : "none";
-  ["transit-bus", "transit-rail-base", "transit-rail-ties"].forEach((id) => {
+  const railVis = transitState.rail ? "visible" : "none";
+  ["transit-rail-base", "transit-rail-ties"].forEach((id) => {
     if (map.getLayer(id)) {
-      map.setLayoutProperty(id, "visibility", vis);
-      map.setFilter(id, transitFilter(id === "transit-bus" ? "bus" : "rail"));
+      map.setLayoutProperty(id, "visibility", railVis);
+      map.setFilter(id, ["==", ["get", "kind"], "rail"]);
     }
   });
-  LAYERS.transit.enabled = transitState.master;
+  const busOn = transitState.busFreq || transitState.busOther;
+  if (map.getLayer("transit-bus")) {
+    map.setLayoutProperty("transit-bus", "visibility", busOn ? "visible" : "none");
+    map.setFilter("transit-bus", busFilter());
+  }
+  LAYERS.transit.enabled = transitState.rail || busOn;
   refreshLegend();
 }
 function transitPopup(p) {
@@ -4195,18 +4261,24 @@ function transitPopup(p) {
     ${p.hw_am ? `<div class="popup-row"><span class="label">AM headway</span><span class="value">~${p.hw_am} min</span></div>` : ""}
     ${p.hw_pm ? `<div class="popup-row"><span class="label">PM headway</span><span class="value">~${p.hw_pm} min</span></div>` : ""}`;
 }
-async function transitEnable() {
-  if (!map.getSource("transit-src")) {
-    const r = await fetch("data/transit_routes.geojson");
-    map.addSource("transit-src", { type: "geojson", data: await r.json() });
-  }
-  if (!transitState.added) {
+// Three checkboxes can each be the first to enable transit, so serialize the
+// one-time source+layer add behind a shared promise to avoid a double addSource.
+let transitAddPromise = null;
+function transitEnsureAdded() {
+  if (transitState.added) return Promise.resolve();
+  if (transitAddPromise) return transitAddPromise;
+  transitAddPromise = (async () => {
+    if (!map.getSource("transit-src")) {
+      const r = await fetch("data/transit_routes.geojson");
+      map.addSource("transit-src", { type: "geojson", data: await r.json() });
+    }
     const railColor = ["case", ["get", "frequent"], RAIL_DARK, RAIL_LIGHT];   // frequent = dark purple
     if (!map.hasImage("rail-tie-freq")) map.addImage("rail-tie-freq", railTieImage(RAIL_DARK));
     if (!map.hasImage("rail-tie-infq")) map.addImage("rail-tie-infq", railTieImage(RAIL_LIGHT));
-    // Bus: 2 tiers by worst-peak headway — frequent green (25% thicker) vs >20 min dark blue
+    // Bus: one line layer colored/sized per feature by worst-peak headway
+    // (frequent green & 25% thicker vs >20 min dark blue); busFilter() picks tiers.
     map.addLayer({ id: "transit-bus", type: "line", source: "transit-src",
-      filter: transitFilter("bus"), layout: { "line-cap": "round", "line-join": "round" },
+      filter: busFilter(), layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": ["step", ["get", "hw"], BUS_FREQ, 21, BUS_MED],
         "line-width": ["interpolate", ["linear"], ["zoom"],
@@ -4218,11 +4290,11 @@ async function transitEnable() {
     // symbol-spacing places ties at even pixel intervals at any zoom, unlike a dasharray (which
     // bunches near the line's vertices when zoomed out).
     map.addLayer({ id: "transit-rail-base", type: "line", source: "transit-src",
-      filter: transitFilter("rail"), layout: { "line-cap": "round", "line-join": "round" },
+      filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": railColor,
         "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3, 15, 6.5], "line-opacity": 0.95 } }, beneathTopLayers());
     map.addLayer({ id: "transit-rail-ties", type: "symbol", source: "transit-src",
-      filter: transitFilter("rail"),
+      filter: ["==", ["get", "kind"], "rail"],
       layout: {
         "symbol-placement": "line",
         "symbol-spacing": 10,
@@ -4245,35 +4317,37 @@ async function transitEnable() {
     });
     transitState.added = true;
     LAYERS.transit.layerIds.forEach((id) => layersAdded.add(id));
-  }
-  transitApply();
+  })();
+  return transitAddPromise;
 }
 function initTransit() {
-  const cb = document.querySelector('input[data-layer-group="transit"]');
-  if (!cb) return;
-  cb.addEventListener("change", async () => {
-    transitState.master = cb.checked;
-    if (cb.checked) {
-      cb.parentElement.classList.add("loading");
-      try { await transitEnable(); applyLayerOrder(); } finally { cb.parentElement.classList.remove("loading"); }
-    } else { transitApply(); }
-  });
-  document.querySelectorAll('input[name="transit_mode"]').forEach((rb) => {
-    rb.addEventListener("change", () => { if (rb.checked) { transitState.mode = rb.value; transitApply(); } });
+  document.querySelectorAll("input[data-transit]").forEach((cb) => {
+    cb.addEventListener("change", async () => {
+      transitState[cb.dataset.transit] = cb.checked;
+      if (cb.checked) {
+        cb.parentElement.classList.add("loading");
+        try { await transitEnsureAdded(); transitApply(); applyLayerOrder(); }
+        finally { cb.parentElement.classList.remove("loading"); }
+      } else {
+        transitApply();
+      }
+    });
   });
 }
 LAYERS.transit = {
   label: "Transit network", enabled: false,
   layerIds: ["transit-bus", "transit-rail-base", "transit-rail-ties"],
   legend: () => {
-    const all = transitState.mode === "all";
-    const rows = [
-      `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${RAIL_DARK};border-top-width:4px"></span>Frequent rail</div>`,
-      all ? `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${RAIL_LIGHT};border-top-width:4px"></span>Other rail</div>` : "",
-      `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${BUS_FREQ};border-top-width:3.5px"></span>Frequent bus (&le;20 min)</div>`,
-      all ? `<div class="swatch-row"><span class="line-swatch" style="border-top-color:${BUS_MED};border-top-width:2px"></span>Bus (&gt;20 min)</div>` : "",
-    ].filter(Boolean).join("");
-    return `<div class="legend-block"><h3>Transit network (DART)</h3>${rows}<div class="muted" style="margin-top:3px">DART GTFS · frequent = &le;20 min in 7-9am &amp; 4-6pm</div></div>`;
+    const rows = [];
+    if (transitState.rail) {
+      rows.push(`<div class="swatch-row"><span class="line-swatch" style="border-top-color:${RAIL_DARK};border-top-width:4px"></span>Frequent rail</div>`);
+      rows.push(`<div class="swatch-row"><span class="line-swatch" style="border-top-color:${RAIL_LIGHT};border-top-width:4px"></span>Other rail</div>`);
+    }
+    if (transitState.busFreq)
+      rows.push(`<div class="swatch-row"><span class="line-swatch" style="border-top-color:${BUS_FREQ};border-top-width:3.5px"></span>Frequent bus (&le;20 min)</div>`);
+    if (transitState.busOther)
+      rows.push(`<div class="swatch-row"><span class="line-swatch" style="border-top-color:${BUS_MED};border-top-width:2px"></span>Other bus (&gt;20 min)</div>`);
+    return `<div class="legend-block"><h3>Transit network (DART)</h3>${rows.join("")}<div class="muted" style="margin-top:3px">DART GTFS · frequent = &le;20 min in 7-9am &amp; 4-6pm</div></div>`;
   },
 };
 
@@ -4416,8 +4490,8 @@ const TOOLTIPS = {
   land_use: "What is BUILT on each parcel (CAD land use). Some apartments are CAD-coded 'Commercial'. Differs from Base zoning, which is what's ALLOWED.",
   zoning: "What each parcel ALLOWS (base zoning district). Planned Development (PD) is a catch-all where much of Dallas's density is actually entitled — it is not a base district.",
   demographics: "Census ACS 2020–24 5-year estimates by tract. Small-sample tract values carry wide margins of error — treat as approximate.",
-  subsidized: "LIHTC (tax-credit) properties from the TDHCA inventory. Not public housing, project-based Section 8, or vouchers. Older awards may be leaving affordability.",
-  transit: "DART routes. 'Frequent' = 20-minute-or-better headway in BOTH the 7–9am and 4–6pm weekday peaks. Rail drawn with cross-ties; bus shaded by headway.",
+  subsidized: "Income-restricted housing. LIHTC = federal tax-credit properties (TDHCA inventory). PFC / HFC = apartments owned by a public facility or housing finance corporation — property-tax-exempt in exchange for affordability (DCAD, all years). Dots sized by total units.",
+  transit: "DART routes. Rail = light-rail + commuter lines (drawn with cross-ties). Buses split by service: frequent = 20-min-or-better headway in BOTH the 7–9am and 4–6pm weekday peaks; other = worse than 20 min.",
   floodplain: "FEMA National Flood Hazard Layer. 100-yr = 1% annual-chance (Special Flood Hazard Area); 500-yr = 0.2% annual-chance.",
   street_pattern: "OSM street-network connectivity per tract: dendricity (tree-likeness), dead-end share, and intersection density — grid vs. cul-de-sac suburbia.",
   jobs_density: "Workplace jobs per acre (Census LODES 2022). Wage tiers are MODEL-BASED (BLS sector-weighted), not measured earnings.",
@@ -4429,16 +4503,22 @@ const TOOLTIPS = {
   permits: "New-construction building permits. MF counts include apartments in CAD 'Commercial' buildings but exclude hotels/retail. Slider sets the permit-year range.",
 };
 function injectTooltips() {
-  document.querySelectorAll("[data-layer],[data-layer-group]").forEach((cb) => {
-    const key = cb.dataset.layer || cb.dataset.layerGroup;
-    const tip = TOOLTIPS[key];
-    if (!tip) return;
-    const span = cb.closest("label")?.querySelector("span");
-    if (!span || span.querySelector(".info-tip")) return;
+  const mkTip = (host, tip) => {
+    if (!host || host.querySelector(".info-tip")) return;
     const b = document.createElement("span");
     b.className = "info-tip"; b.textContent = "?";
     b.title = tip; b.setAttribute("aria-label", tip);
-    span.appendChild(b);
+    host.appendChild(b);
+  };
+  document.querySelectorAll("[data-layer],[data-layer-group]").forEach((cb) => {
+    if (cb.closest(".layer-toggle-multi")) return;   // multi-group tips go on the group title
+    const tip = TOOLTIPS[cb.dataset.layer || cb.dataset.layerGroup];
+    if (tip) mkTip(cb.closest("label")?.querySelector("span"), tip);
+  });
+  // Multi-check group titles (Subsidized housing, Transit network) carry data-tip.
+  document.querySelectorAll("[data-tip]").forEach((el) => {
+    const tip = TOOLTIPS[el.dataset.tip];
+    if (tip) mkTip(el, tip);
   });
 }
 
@@ -4466,6 +4546,7 @@ const VINTAGE = {
 const VINTAGE_GROUP = {
   "Jurisdiction boundaries": "Census TIGER / City of Dallas",
   "Street grid": "OpenStreetMap",
+  "Subsidized housing": "TDHCA inventory + DCAD 2025",
 };
 function withVintage(html, v) {
   if (!v || !html) return html;
