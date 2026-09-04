@@ -60,7 +60,17 @@ class DevHandler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    httpd = ThreadingHTTPServer(("", port), DevHandler)
+    # Windows lets multiple sockets bind the same port with SO_REUSEADDR (the default),
+    # which silently splits requests between servers — if a stale/old one lingers, the
+    # parcel tiles fail intermittently. Refuse to start a second instance instead.
+    ThreadingHTTPServer.allow_reuse_address = False
+    try:
+        httpd = ThreadingHTTPServer(("", port), DevHandler)
+    except OSError as e:
+        print(f"Cannot start on port {port}: {e}")
+        print(f"Another server is already using {port}. Stop it first (close its window / "
+              f"Ctrl+C there), or use another port:  python serve.py {port + 1}")
+        sys.exit(1)
     print(f"Dev server (no-cache + Range) at http://localhost:{port}  (Ctrl+C to stop)")
     try:
         httpd.serve_forever()

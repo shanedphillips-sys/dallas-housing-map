@@ -79,6 +79,33 @@ const map = new maplibregl.Map({
   maxZoom: 18,
 });
 
+// If the parcel/building PMTiles can't stream (server doesn't answer HTTP Range),
+// every parcel-based layer silently goes blank. Detect it once at startup and show a
+// banner explaining the fix — almost always a local dev server that isn't serve.py.
+async function checkPmtilesRangeSupport() {
+  try {
+    const ac = new AbortController();
+    const resp = await fetch("data/parcels.pmtiles", { headers: { Range: "bytes=0-9" }, signal: ac.signal });
+    ac.abort();   // response headers are enough; don't download the file body
+    return resp.status === 206;
+  } catch (e) {
+    return true;  // network / abort error -> don't nag
+  }
+}
+function showRangeBanner() {
+  if (document.getElementById("range-banner")) return;
+  const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || location.protocol === "file:";
+  const msg = local
+    ? "⚠ Parcel layers can’t load — this local server isn’t answering HTTP <b>Range</b> requests (the parcel/building vector tiles need them). Restart it with <code>python serve.py</code> (not <code>python -m http.server</code>), then hard-refresh."
+    : "⚠ Parcel layers didn’t load — the tile server may be re-caching after a recent update. Hard-refresh in a minute, or open in a private window.";
+  const b = document.createElement("div");
+  b.id = "range-banner";
+  b.innerHTML = msg + "<span id=\"range-banner-x\" title=\"Dismiss\">✕</span>";
+  document.body.appendChild(b);
+  document.getElementById("range-banner-x").addEventListener("click", () => b.remove());
+}
+checkPmtilesRangeSupport().then((ok) => { if (!ok) showRangeBanner(); });
+
 function setBasemap(key) {
   if (!BASEMAPS[key]) return;
   for (const [k, b] of Object.entries(BASEMAPS)) {
