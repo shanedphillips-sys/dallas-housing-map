@@ -145,6 +145,18 @@
             </label>
           </div>
 
+          <div class="layer-toggle layer-toggle-grouped">
+            <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+            <label>
+              <input type="checkbox" data-layer="faith_parcels" />
+              <span>Faith-owned land</span>
+            </label>
+            <div class="grouped-controls grouped-controls-stacked">
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-faith="Vacant" checked /><span>Vacant</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-faith="Developed" checked /><span>Developed</span></label>
+            </div>
+          </div>
+
           <div class="layer-toggle">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
             <label>
@@ -366,18 +378,20 @@
             </div>
           </div>
 
-          <div class="layer-toggle layer-toggle-grouped layer-toggle-multi" data-group-layers="subsidized pfc_hfc">
+          <div class="layer-toggle layer-toggle-grouped layer-toggle-multi" data-group-layers="subsidized pfc_hfc public_housing other_subsidy">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <div class="multi-title" data-tip="subsidized">Subsidized housing</div>
+            <label class="multi-title"><input type="checkbox" data-multi-toggle="subsidized" /><span data-tip="subsidized">Subsidized housing</span></label>
             <div class="grouped-controls grouped-controls-stacked">
               <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="subsidized" /><span>LIHTC (tax credit)</span></label>
               <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="pfc_hfc" /><span>PFC / HFC</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="public_housing" /><span>Public housing</span></label>
+              <label class="radio-option" style="width:100%"><input type="checkbox" data-layer="other_subsidy" /><span>Other subsidized housing</span></label>
             </div>
           </div>
 
           <div class="layer-toggle layer-toggle-grouped layer-toggle-multi" data-group-layers="transit">
             <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-            <div class="multi-title" data-tip="transit">Transit network</div>
+            <label class="multi-title"><input type="checkbox" data-multi-toggle="transit" /><span data-tip="transit">Transit network</span></label>
             <div class="grouped-controls grouped-controls-stacked">
               <label class="radio-option" style="width:100%"><input type="checkbox" data-transit="rail" /><span>Rail</span></label>
               <label class="radio-option" style="width:100%"><input type="checkbox" data-transit="busFreq" /><span>Frequent buses (≤20 min peak)</span></label>
@@ -418,7 +432,7 @@
               <li><b>Building footprints (3D)</b> — <a href="https://github.com/microsoft/GlobalMLBuildingFootprints" target="_blank" rel="noopener">Microsoft ML footprints</a> + OSM heights</li>
               <li><b>Streets, alleys, parking, water</b> — <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a></li>
               <li><b>Transit network</b> — <a href="https://www.dart.org" target="_blank" rel="noopener">DART</a> GTFS</li>
-              <li><b>Subsidized housing</b> — <a href="https://www.tdhca.texas.gov" target="_blank" rel="noopener">TDHCA</a> LIHTC inventory; PFC / HFC projects from <a href="https://www.dallascad.org" target="_blank" rel="noopener">DCAD</a></li>
+              <li><b>Subsidized housing</b> — <a href="https://preservationdatabase.org" target="_blank" rel="noopener">National Housing Preservation Database</a> (public housing, project-based Section 8, 202/811, HOME, vouchers, expiration dates) + <a href="https://www.tdhca.texas.gov" target="_blank" rel="noopener">TDHCA</a> LIHTC inventory; PFC / HFC projects from <a href="https://www.dallascad.org" target="_blank" rel="noopener">DCAD</a></li>
               <li><b>Floodplain</b> — <a href="https://www.fema.gov/flood-maps" target="_blank" rel="noopener">FEMA</a> National Flood Hazard Layer</li>
             </ul>
             <p class="muted">Search © OpenStreetMap / Photon. Full per-layer methods are documented in DATA_SOURCES.md in the project repository.</p>

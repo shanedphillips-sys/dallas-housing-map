@@ -199,23 +199,35 @@ html, body {
 }
 .layer-toggle-grouped:has(input[data-layer-group]:checked) .grouped-controls,
 .layer-toggle-grouped:has(input[data-layer="zoning"]:checked) .grouped-controls,
-.layer-toggle-grouped:has(input[data-layer="land_use"]:checked) .grouped-controls {
+.layer-toggle-grouped:has(input[data-layer="land_use"]:checked) .grouped-controls,
+.layer-toggle-grouped:has(input[data-layer="faith_parcels"]:checked) .grouped-controls {
   display: flex;
 }
 
-/* Multi-check groups (Subsidized housing, Transit network): a plain title plus
-   several independent checkboxes, always shown — no parent master toggle, one
-   checkbox per row. */
+/* Multi-check groups (Subsidized housing, Transit network): several independent
+   checkboxes, one per row, folded behind a master checkbox so an unused group costs
+   one sidebar row instead of five. */
 .layer-toggle-multi .grouped-controls {
-  display: flex;
+  display: none;
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
+}
+.layer-toggle-multi:has(input[data-multi-toggle]:checked) .grouped-controls {
+  display: flex;
 }
 .multi-title {
   flex: 1;
   font-weight: 500;
   vertical-align: middle;
+}
+
+/* Faith-owned land status filter: one checkbox per row, like the multi-check groups --
+   the labels carry a FAR threshold and wrap badly side by side. */
+.layer-toggle-grouped:has(input[data-layer="faith_parcels"]) .grouped-controls {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 
 .radio-option {
@@ -798,6 +810,25 @@ html, body {
 
 .popup-change.positive .value { color: #2A6B5F; }
 .popup-change.negative .value { color: #9E2A2B; }
+
+/* Subsidized-housing popups: a program list under a small section heading. */
+.popup-sub {
+  margin: 7px 0 3px 0;
+  padding-top: 6px;
+  border-top: 1px solid #EEEEEE;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888888;
+}
+
+.popup-note {
+  margin-top: 5px;
+  font-size: 11px;
+  font-style: italic;
+  color: #888888;
+}
 
 /* === Value by Land Use report panel === */
 .lu-selector-actions {

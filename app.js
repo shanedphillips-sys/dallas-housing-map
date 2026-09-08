@@ -1742,23 +1742,42 @@ function refreshLegend() {
 const sourcesAdded = new Set();
 const layersAdded = new Set();
 
+// Several layers can share one sourceId — the four subsidized-housing categories all read
+// one deduped file. The fetch/parse awaits sit between the "already added?" check and
+// addSource(), so concurrent enables would each pass the check and then collide with
+// "Source already exists". Memoize the in-flight load so they await the SAME promise.
+const sourceLoads = new Map();
 async function ensureSource(layer) {
   if (layer.customLoad) {
     await layer.customLoad();
     return;
   }
   if (sourcesAdded.has(layer.sourceId)) return;
-  const resp = await fetch(layer.sourceFile);
-  const data = await resp.json();
-  map.addSource(layer.sourceId, { type: "geojson", data });
-  sourcesAdded.add(layer.sourceId);
+  let load = sourceLoads.get(layer.sourceId);
+  if (!load) {
+    load = (async () => {
+      const resp = await fetch(layer.sourceFile);
+      const data = await resp.json();
+      if (!map.getSource(layer.sourceId)) map.addSource(layer.sourceId, { type: "geojson", data });
+      sourcesAdded.add(layer.sourceId);
+    })();
+    sourceLoads.set(layer.sourceId, load);
+  }
+  await load;
 }
 
 async function enableLayer(key) {
   const layer = LAYERS[key];
   await ensureSource(layer);
+  // layersAdded is keyed by layer KEY here as well as by id. It previously received only
+  // ids while this test asked for the key, so it never matched: addLayers() re-ran on every
+  // re-enable and MapLibre threw 'Layer "..." already exists'. Harmless while layers were
+  // rarely switched off and on again; the collapsible groups make that routine.
+  // (Testing map.getLayer() instead is not safe here -- it throws if the style is still
+  // loading, which killed init.)
   if (!layersAdded.has(key)) {
     layer.addLayers();
+    layersAdded.add(key);
     layer.layerIds.forEach((id) => layersAdded.add(id));
     if (layer.clickLayer) {
       const clickTargets = Array.isArray(layer.clickLayer) ? layer.clickLayer : [layer.clickLayer];
@@ -2078,6 +2097,8 @@ map.on("load", async () => {
 
   // ---- Shareable view URLs: restore from the hash, then keep it in sync ----
   await applyMapState(location.hash.replace(/^#/, ""));
+  initMultiToggles();
+  initFaithToggles();
   map.on("moveend", scheduleHashWrite);
   const sidebarEl = document.getElementById("sidebar");
   if (sidebarEl) sidebarEl.addEventListener("change", scheduleHashWrite);
@@ -2099,6 +2120,26 @@ map.on("load", async () => {
 
 // ---- Shareable view URL state ----------------------------------------------
 // Serialize map view + control state into the URL hash so every view has a unique
+// Multi-check groups (Subsidized housing, Transit network) fold behind a master checkbox.
+// Collapsing also switches the group's layers off: leaving them drawn with their controls
+// hidden would strand the user with no way to turn them back off. On load the master is
+// re-checked if a shared URL restored any of its sub-layers, so the controls stay reachable.
+function initMultiToggles() {
+  document.querySelectorAll("input[data-multi-toggle]").forEach((master) => {
+    const box = master.closest(".layer-toggle-multi");
+    const subs = () => box.querySelectorAll('.grouped-controls input[type="checkbox"]');
+    if ([...subs()].some((cb) => cb.checked)) master.checked = true;
+    master.addEventListener("change", () => {
+      if (master.checked) return;
+      subs().forEach((cb) => {
+        if (!cb.checked) return;
+        cb.checked = false;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+  });
+}
+
 // shareable link; applyMapState() restores it on load. List separator "~" (zone
 // codes contain ".", e.g. R-7.5); key:value pairs joined with ":".
 function serializeMapState() {
@@ -2115,6 +2156,8 @@ function serializeMapState() {
   const tr = [];   // transit sub-checkboxes (rail / busFreq / busOther)
   document.querySelectorAll("input[data-transit]:checked").forEach((cb) => tr.push(cb.dataset.transit));
   if (tr.length) params.set("tr", tr.join("~"));
+  const fth = faithSelection();   // faith-land status filter; omitted when all three are on
+  if (fth.length !== 3) params.set("fth", fth.join("~"));
   const rad = [];
   document.querySelectorAll('input[type="radio"]:checked').forEach((rb) => {
     if (rb.name && rb.name !== "basemap") rad.push(`${rb.name}:${rb.value}`);
@@ -2190,6 +2233,17 @@ async function applyMapState(hashStr) {
         const shouldBe = want.has(cb.dataset.transit);
         if (cb.checked !== shouldBe) { cb.checked = shouldBe; cb.dispatchEvent(new Event("change", { bubbles: true })); }
       });
+    }
+    // faith-owned land status filter (own param; not data-layer/-group checkboxes)
+    {
+      const raw = params.get("fth");
+      if (raw !== null) {
+        const want = new Set(raw.split("~").filter(Boolean));
+        document.querySelectorAll("input[data-faith]").forEach((cb) => {
+          cb.checked = want.has(cb.dataset.faith);
+        });
+        applyFaithFilter();
+      }
     }
     // refresh sliders now that their layers are live (updates labels + expression)
     (params.get("s") || "").split("~").filter(Boolean).forEach((pair) => {
@@ -4031,6 +4085,100 @@ LAYERS.parking = {
     </div>`,
 };
 
+// Land owned by faith-based organisations (churches, synagogues, mosques, temples), built
+// by build_faith_parcels.py from the Dallas / Collin / Denton appraisal rolls. Vacant
+// parcels are drawn in the lighter tone: those are the sites a housing study can act on.
+// Faith-owned land: vacant (the opportunity) vs anything with a structure on it. Two hues
+// rather than shades of one so they stay separable for colour-vision-deficient readers.
+// Intensity is deliberately NOT graded further -- DCAD records exempt buildings as a 100 sq
+// ft placeholder, so no floor-area ratio is available for the churches themselves.
+const FAITH_COLORS = {
+  Vacant: "#7B3294",
+  Developed: "#3D6FB0",
+};
+
+// The three status checkboxes filter the layer rather than switching separate layers, so
+// they share one source and one draw order. All three ticked by default; unticking all
+// leaves the layer on but empty, which is the honest reading of "show me none of these".
+function faithSelection() {
+  return [...document.querySelectorAll("input[data-faith]:checked")].map((cb) => cb.dataset.faith);
+}
+function applyFaithFilter() {
+  const on = faithSelection();
+  const filt = ["in", ["get", "devcat"], ["literal", on]];
+  ["faith-fill", "faith-outline"].forEach((id) => {
+    if (map.getLayer(id)) map.setFilter(id, filt);
+  });
+  refreshLegend();
+  scheduleHashWrite();   // keep the status filter in the shareable link
+}
+function initFaithToggles() {
+  document.querySelectorAll("input[data-faith]").forEach((cb) => {
+    cb.addEventListener("change", applyFaithFilter);
+  });
+}
+
+LAYERS.faith_parcels = {
+  label: "Faith-owned land",
+  minzoom: 9,
+  sourceId: "faith-src",
+  sourceFile: "data/faith_parcels.geojson",
+  layerIds: ["faith-fill", "faith-outline"],
+  addLayers: () => {
+    map.addLayer({
+      id: "faith-fill",
+      type: "fill",
+      source: "faith-src",
+      minzoom: 9,
+      paint: {
+        "fill-color": ["match", ["get", "devcat"],
+          "Vacant", FAITH_COLORS.Vacant,
+          FAITH_COLORS.Developed],
+        "fill-opacity": 0.7,
+      },
+    }, beneathTopLayers());
+    map.addLayer({
+      id: "faith-outline",
+      type: "line",
+      source: "faith-src",
+      minzoom: 12,
+      paint: { "line-color": "#4A3A55", "line-width": 0.5, "line-opacity": 0.7 },
+    }, beneathTopLayers());
+    applyFaithFilter();
+  },
+  popup: (props) => {
+    const acres = props.acres != null ? Number(props.acres).toLocaleString(undefined,
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "?";
+    // DCAD records exempt buildings as a 100 sq ft placeholder, so floor area is shown
+    // only where it was actually measured rather than implying a precision it lacks.
+    const bldg = props.devcat === "Vacant" ? "none"
+      : props.bldg_sf_known ? `${Number(props.bldg_sf).toLocaleString()} sq ft`
+      : "present, not measured by DCAD";
+    return `
+    <div class="popup-title">${props.owner || "Faith-owned parcel"}</div>
+    ${props.address ? `<div class="popup-row"><span class="label">Address</span><span class="value">${props.address}</span></div>` : ""}
+    <div class="popup-row"><span class="label">Status</span><span class="value">${props.devcat || "?"}</span></div>
+    <div class="popup-row"><span class="label">Land area</span><span class="value">${acres} acres</span></div>
+    <div class="popup-row"><span class="label">Building</span><span class="value">${bldg}</span></div>
+    <div class="popup-row"><span class="label">Church building</span><span class="value">${props.church_bldg ? "Yes (DCAD building class)" : "No"}</span></div>
+    <div class="popup-row"><span class="label">Zoning</span><span class="value">${props.zone_dist || "?"}${props.zone_cat ? ` (${props.zone_cat})` : ""}</span></div>
+    <div class="popup-row"><span class="label">Council district</span><span class="value">${props.council ?? "?"}</span></div>
+    <div class="popup-row"><span class="label">Tax exempt</span><span class="value">${props.exempt ? "Yes" : "No"}</span></div>
+    <div class="popup-row"><span class="label">Identified by</span><span class="value">${props.source || "?"}</span></div>`;
+  },
+  clickLayer: "faith-fill",
+  legend: () => {
+    const label = { Vacant: "Vacant", Developed: "Developed (any structure)" };
+    const rows = faithSelection().map((k) =>
+      `<div class="swatch-row"><span class="swatch" style="background:${FAITH_COLORS[k]}"></span>${label[k]}</div>`).join("");
+    return `
+    <div class="legend-block">
+      <h3>Faith-owned land</h3>
+      ${rows || '<div class="swatch-row muted">No status selected</div>'}
+    </div>`;
+  },
+};
+
 // Optional street-name labels — a sub-checkbox under "Street grid". Shares the
 // street-grid source (label segments are the same OSM line features, now carrying
 // `name`), so it works whether or not the street lines themselves are shown.
@@ -4084,63 +4232,94 @@ LAYERS.street_labels = {
 // inventory (green); PFC/HFC = public-facility / housing-finance-corp apartment
 // projects from DCAD (orange, all years). Both size the dot by total units and
 // collapse into one "Subsidized housing" legend block via legendGroup.
+// Sized by INCOME-RESTRICTED units, not total units — a mixed-income property should not
+// read as large as a fully restricted one of the same size. `restricted_units` is absent
+// where no set-aside count is published (all 51 PFC/HFC properties: DCAD reports no
+// restricted count), and those fall back to total units; the popup labels which it is.
+const SUBSIDIZED_UNITS = ["max", ["coalesce", ["get", "restricted_units"], ["get", "total_units"], 1], 1];
 const SUBSIDIZED_RADIUS = ["interpolate", ["linear"], ["zoom"],
-  10, ["*", 0.45, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]],
-  15, ["*", 1.1, ["sqrt", ["max", ["coalesce", ["get", "total_units"], 1], 1]]]];
-LAYERS.subsidized = {
-  label: "LIHTC (subsidized)",
-  sourceId: "subsidized-src",
-  sourceFile: "data/subsidized_housing.geojson",
-  layerIds: ["subsidized"],
-  addLayers: () => {
-    map.addLayer({
-      id: "subsidized", type: "circle", source: "subsidized-src",
-      paint: {
-        "circle-radius": SUBSIDIZED_RADIUS,
-        "circle-color": "#2E8B6B", "circle-opacity": 0.82,
-        "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
-      },
-    }, beneathTopLayers());
-  },
-  popup: (p) => `
-    <div class="popup-title">${p.name || "LIHTC property"}</div>
-    ${p.address ? `<div class="popup-row"><span class="label">Address</span><span class="value">${p.address}</span></div>` : ""}
-    <div class="popup-row"><span class="label">Total units</span><span class="value">${p.total_units ?? "?"}</span></div>
-    <div class="popup-row"><span class="label">Income-restricted</span><span class="value">${p.lihtc_units ?? "?"}</span></div>
-    ${p.year ? `<div class="popup-row"><span class="label">Awarded</span><span class="value">${p.year}</span></div>` : ""}
-    ${p.pop_served ? `<div class="popup-row"><span class="label">Serves</span><span class="value">${p.pop_served}</span></div>` : ""}`,
-  clickLayer: "subsidized",
-  legendGroup: "Subsidized housing",
-  legendOrder: 1,
-  legendRow: () => `<div class="swatch-row"><span class="swatch" style="background:#2E8B6B;border-radius:50%"></span>LIHTC (tax credit) · sized by units</div>`,
+  10, ["*", 0.45, ["sqrt", SUBSIDIZED_UNITS]],
+  15, ["*", 1.1, ["sqrt", SUBSIDIZED_UNITS]]];
+
+// All four categories read ONE deduped file (data/subsidized_all.geojson, built by
+// build_subsidized_layers.py) and filter on `category`, so a building can never be drawn
+// in two layers. When a property stacks programs the category is assigned by priority --
+// LIHTC > PFC/HFC > public housing > other -- but the popup always lists EVERY active
+// program at that property, with its expiration date where one exists.
+const SUBSIDIZED_CATS = [
+  ["subsidized", "lihtc", "#2E8B6B", "LIHTC (tax credit)"],
+  ["pfc_hfc", "pfc_hfc", "#E8820E", "PFC / HFC"],
+  ["public_housing", "public_housing", "#2E74B5", "Public housing"],
+  ["other_subsidy", "other", "#8E5EA8", "Other subsidized housing"],
+];
+
+// Programs with no expiration say so rather than showing a blank.
+const NO_EXPIRY = {
+  "PFC / HFC": "no statutory term",
+  "Public housing": "no expiration",
+  "Project-based voucher": "not published",
 };
-LAYERS.pfc_hfc = {
-  label: "PFC / HFC",
-  sourceId: "pfc-hfc-src",
-  sourceFile: "data/pfc_hfc_projects.geojson",
-  layerIds: ["pfc-hfc"],
-  addLayers: () => {
-    map.addLayer({
-      id: "pfc-hfc", type: "circle", source: "pfc-hfc-src",
-      paint: {
-        "circle-radius": SUBSIDIZED_RADIUS,
-        "circle-color": "#E8820E", "circle-opacity": 0.82,
-        "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
-      },
-    }, beneathTopLayers());
-  },
-  popup: (p) => `
-    <div class="popup-title">${p.name || "PFC/HFC property"}</div>
+function subsidyPopup(p) {
+  let subs = [];
+  try { subs = JSON.parse(p.subsidies_json || "[]"); } catch (e) { subs = []; }
+  const endOf = (s) => {
+    if (s.end) return s.end.slice(0, 4);
+    for (const k in NO_EXPIRY) if (s.program.startsWith(k)) return NO_EXPIRY[k];
+    return "not published";
+  };
+  const rows = subs.filter((s) => s.restricts).map((s) => {
+    const flag = s.status && !s.status.startsWith("Active") ? ` (${s.status.toLowerCase()})` : "";
+    return `<div class="popup-row"><span class="label">${s.program}${s.units ? ` · ${s.units} units` : ""}</span>` +
+           `<span class="value">${endOf(s)}${flag}</span></div>`;
+  }).join("");
+  const context = subs.filter((s) => !s.restricts).map((s) =>
+    `<div class="popup-note">Also carries a ${s.program.toLowerCase()}${s.detail ? ` (${s.detail})` : ""} — not an income restriction.</div>`).join("");
+  return `
+    <div class="popup-title">${p.name || "Subsidized property"}</div>
     ${p.address ? `<div class="popup-row"><span class="label">Address</span><span class="value">${p.address}</span></div>` : ""}
     <div class="popup-row"><span class="label">Total units</span><span class="value">${p.units_est ? "~" + p.total_units + " (est. from building area)" : (p.total_units ?? "?")}</span></div>
+    <div class="popup-row"><span class="label">Income-restricted</span><span class="value">${
+      p.restricted_units != null
+        ? `${p.restricted_units}${p.total_units && p.restricted_units < p.total_units
+            ? ` of ${p.total_units} (${Math.round(p.restricted_units / p.total_units * 100)}%)` : " (all units)"}`
+        : "not published"}</span></div>
+    ${p.restricted_source === "published"
+      ? `<div class="popup-note">Restricted-unit count published by the Dallas Public Facility Corporation.</div>`
+      : p.restricted_source === "assumed"
+        ? `<div class="popup-note"><b>Estimated</b>, not published: half the units (rounded up), the Ch. 394 statutory minimum and the share every Dallas PFC property that publishes one reports (50.0–52.6%).</div>`
+        : ""}
+    ${p.award_year ? `<div class="popup-row"><span class="label">LIHTC awarded</span><span class="value">${p.award_year}</span></div>` : ""}
     ${p.year_built ? `<div class="popup-row"><span class="label">Built</span><span class="value">${p.year_built}</span></div>` : ""}
-    ${p.owner ? `<div class="popup-row"><span class="label">Owner</span><span class="value">${p.owner}</span></div>` : ""}
-    ${p.lihtc ? `<div class="popup-row"><span class="label">Also LIHTC</span><span class="value">Yes</span></div>` : ""}`,
-  clickLayer: "pfc-hfc",
-  legendGroup: "Subsidized housing",
-  legendOrder: 2,
-  legendRow: () => `<div class="swatch-row"><span class="swatch" style="background:#E8820E;border-radius:50%"></span>PFC / HFC · sized by units</div>`,
-};
+    ${p.pop_served ? `<div class="popup-row"><span class="label">Serves</span><span class="value">${p.pop_served}</span></div>` : ""}
+    <div class="popup-sub">Programs &amp; affordability end</div>
+    ${rows || `<div class="popup-row"><span class="label">—</span><span class="value">none recorded</span></div>`}
+    ${context}`;
+}
+SUBSIDIZED_CATS.forEach(([key, cat, color, label], i) => {
+  const id = `subsidized-${cat}`;
+  LAYERS[key] = {
+    label,
+    sourceId: "subsidized-all-src",
+    sourceFile: "data/subsidized_all.geojson",
+    layerIds: [id],
+    addLayers: () => {
+      map.addLayer({
+        id, type: "circle", source: "subsidized-all-src",
+        filter: ["==", ["get", "category"], cat],
+        paint: {
+          "circle-radius": SUBSIDIZED_RADIUS,
+          "circle-color": color, "circle-opacity": 0.82,
+          "circle-stroke-color": "#FFFFFF", "circle-stroke-width": 1,
+        },
+      }, beneathTopLayers());
+    },
+    popup: subsidyPopup,
+    clickLayer: id,
+    legendGroup: "Subsidized housing",
+    legendOrder: i + 1,
+    legendRow: () => `<div class="swatch-row"><span class="swatch" style="background:${color};border-radius:50%"></span>${label} · sized by income-restricted units</div>`,
+  };
+});
 
 // ---- Floodplain (FEMA NFHL) — 100-yr / 500-yr / both -----------------------
 const floodState = { master: false, mode: "both", added: false };
@@ -4490,7 +4669,7 @@ const TOOLTIPS = {
   land_use: "What is BUILT on each parcel (CAD land use). Some apartments are CAD-coded 'Commercial'. Differs from Base zoning, which is what's ALLOWED.",
   zoning: "What each parcel ALLOWS (base zoning district). Planned Development (PD) is a catch-all where much of Dallas's density is actually entitled — it is not a base district.",
   demographics: "Census ACS 2020–24 5-year estimates by tract. Small-sample tract values carry wide margins of error — treat as approximate.",
-  subsidized: "Income-restricted housing. LIHTC = federal tax-credit properties (TDHCA inventory). PFC / HFC = apartments owned by a public facility or housing finance corporation — property-tax-exempt in exchange for affordability (DCAD, all years). Dots sized by total units.",
+  subsidized: "Income-restricted housing, one dot per property with no double-counting: a building that stacks programs is drawn in its highest-priority category (LIHTC > PFC/HFC > public housing > other) and the popup lists every active program with its expiration date. LIHTC = federal tax credits (TDHCA + NHPD). PFC/HFC = owned by a public facility or housing finance corporation, tax-exempt in exchange for affordability (DCAD). Other = project-based Section 8, 202/811, HOME, project-based vouchers (NHPD). Dots sized by total units.",
   transit: "DART routes. Rail = light-rail + commuter lines (drawn with cross-ties). Buses split by service: frequent = 20-min-or-better headway in BOTH the 7–9am and 4–6pm weekday peaks; other = worse than 20 min.",
   floodplain: "FEMA National Flood Hazard Layer. 100-yr = 1% annual-chance (Special Flood Hazard Area); 500-yr = 0.2% annual-chance.",
   street_pattern: "OSM street-network connectivity per tract: dendricity (tree-likeness), dead-end share, and intersection density — grid vs. cul-de-sac suburbia.",
@@ -4542,11 +4721,12 @@ const VINTAGE = {
   permits: "City of Dallas · 2000–2024",
   buildings: "MS ML footprints + OSM",
   parking: "OpenStreetMap",
+  faith_parcels: "DCAD / Collin CAD / Denton CAD 2025",
 };
 const VINTAGE_GROUP = {
   "Jurisdiction boundaries": "Census TIGER / City of Dallas",
   "Street grid": "OpenStreetMap",
-  "Subsidized housing": "TDHCA inventory + DCAD 2025",
+  "Subsidized housing": "NHPD + TDHCA inventory + DCAD 2025",
 };
 function withVintage(html, v) {
   if (!v || !html) return html;
