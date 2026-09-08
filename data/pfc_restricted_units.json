@@ -1,0 +1,91 @@
+{
+  "source": "https://dallaspfc.com/leasing-properties/",
+  "accessed": "2026-09-06",
+  "note": "Income-restricted unit counts published by the Dallas Public Facility Corporation for its own leasing properties, by AMI band. This is the only public source found that states restricted counts for PFC deals: DCAD reports ownership but no set-aside, and TDHCA's published PFC monitoring reports state a unit count only incidentally (1 of 4 sampled). Dallas HFC (dallashfc.com) publishes a project map with 31 DHFC + 25 DPFC placemarks but NO unit data, so it contributes nothing here. 'restricted_units' is the sum of the AMI bands; where the site also lists market-rate units the three add to the published total, which is a useful check. Several of these developments span more than one DCAD parcel, so 'addresses' may list several; build_subsidized_layers.py applies the absolute count when a parcel's total matches the published total, and the published affordable SHARE otherwise.",
+  "properties": [
+    {
+      "name": "The Finch",
+      "addresses": ["1710 Morrell Ave"],
+      "total_units": 153,
+      "ami_60": 63, "ami_80": 15, "market": null,
+      "restricted_units": 78
+    },
+    {
+      "name": "Ascent at Mountain Creek",
+      "addresses": ["4868 S Merrifield Rd"],
+      "total_units": 324,
+      "ami_60": 0, "ami_80": 162, "market": null,
+      "restricted_units": 162
+    },
+    {
+      "name": "Standard at Royal",
+      "addresses": ["2737 Royal Ln"],
+      "total_units": 300,
+      "ami_60": 120, "ami_80": 30, "market": null,
+      "restricted_units": 150
+    },
+    {
+      "name": "Ferguson Flats at Bishop Ridge",
+      "addresses": ["624 N Lancaster Ave"],
+      "total_units": 42,
+      "ami_60": 4, "ami_80": 17, "market": 21,
+      "restricted_units": 21
+    },
+    {
+      "name": "Burnett Lofts",
+      "addresses": ["512 N Ewing Ave"],
+      "total_units": 86,
+      "ami_60": 9, "ami_80": 35, "market": 42,
+      "restricted_units": 44
+    },
+    {
+      "name": "Co/Op Singleton",
+      "addresses": ["2901 Borger St"],
+      "total_units": 176,
+      "ami_60": 9, "ami_80": 79, "market": null,
+      "restricted_units": 88
+    },
+    {
+      "name": "Co/Op Bluffview",
+      "addresses": ["3842 W Northwest Hwy", "3842 W Northeast Hwy"],
+      "total_units": 175,
+      "ami_60": 70, "ami_80": 18, "market": null,
+      "restricted_units": 88
+    },
+    {
+      "name": "Cambridge at Bishop Ridge",
+      "addresses": ["627 N Lancaster Ave", "619 N Lancaster Ave"],
+      "total_units": 42,
+      "ami_60": 4, "ami_80": 17, "market": 21,
+      "restricted_units": 21
+    },
+    {
+      "name": "Copper Bishop Arts",
+      "addresses": ["505 W 8th St"],
+      "total_units": 232,
+      "ami_60": 94, "ami_80": 24, "market": null,
+      "restricted_units": 118
+    },
+    {
+      "name": "Banyan Flats",
+      "addresses": ["2020 N Beckley Ave", "2022 N Beckley Ave"],
+      "total_units": 289,
+      "ami_60": 29, "ami_80": 116, "market": null,
+      "restricted_units": 145
+    },
+    {
+      "name": "Oakhouse at Colorado",
+      "addresses": ["900 E Colorado Blvd"],
+      "total_units": 215,
+      "ami_60": 0, "ami_80": 113, "market": null,
+      "restricted_units": 113
+    },
+    {
+      "name": "Co/Op Maple",
+      "addresses": ["5907 Maple Ave", "5908 Maple Ave"],
+      "total_units": 130,
+      "ami_60": 13, "ami_80": 52, "market": null,
+      "restricted_units": 65
+    }
+  ]
+}
